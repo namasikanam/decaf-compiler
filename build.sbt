@@ -21,7 +21,7 @@ enablePlugins(Antlr4Plugin)
 
 antlr4PackageName in Antlr4 := Some("decaf.frontend.parsing.antlr")
 
-antlr4GenListener in Antlr4 := true // default: true
+antlr4GenListener in Antlr4 := false // default: true
 
 antlr4GenVisitor in Antlr4 := true // default: false
 

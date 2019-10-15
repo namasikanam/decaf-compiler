@@ -54,9 +54,9 @@ stmtBlock: '{' stmt* '}';
 simple:
 	lValue '=' expr		# assign
 	| var ('=' expr)?	# localVarDef
-	| AUTO id '=' expr	# localVarDef
 	| expr				# eval
-	| /* empty */		# skip;
+	| /* empty */		# skip
+	| AUTO id '=' expr	# localVarDef;
 
 lValue: (expr '.')? id					# lValueVar
 	| array = expr '[' index = expr ']'	# lValueIndex;
