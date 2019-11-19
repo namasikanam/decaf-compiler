@@ -2,8 +2,6 @@ lexer grammar DecafLexer;
 
 // Keywords (except those literals)
 
-ABSTRACT: 'abstract';
-AUTO: 'var';
 BOOL: 'bool';
 BREAK: 'break';
 CLASS: 'class';
@@ -23,6 +21,8 @@ STRING: 'string';
 THIS: 'this';
 VOID: 'void';
 WHILE: 'while';
+ABSTRACT: 'abstract';
+VAR__KEYWORD: 'var';
 FUN: 'fun';
 
 // Operators

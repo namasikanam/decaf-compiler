@@ -56,9 +56,7 @@ import scala.collection.mutable
   * @see [[decaf.frontend.annot.Scope]]
   * @see [[decaf.frontend.annot.Symbol]]
   */
-class Namer(implicit config: Config)
-    extends Phase[Tree, Typed.Tree]("namer", config)
-    with Util {
+class Namer(implicit config: Config) extends Phase[Tree, Typed.Tree]("namer", config) with Util {
 
   class Context {
 
@@ -76,12 +74,12 @@ class Namer(implicit config: Config)
     implicit val ctx = new Context
 
     // Check conflicting definitions. If any, ignore the redefined ones.
-    tree.classes.foreach { clazz =>
-      ctx.classes.get(clazz.name) match {
-        case Some(earlier) =>
-          issue(new DeclConflictError(clazz.name, earlier.pos, clazz.pos))
-        case None => ctx.classes(clazz.name) = clazz
-      }
+    tree.classes.foreach {
+      clazz =>
+        ctx.classes.get(clazz.name) match {
+          case Some(earlier) => issue(new DeclConflictError(clazz.name, earlier.pos, clazz.pos))
+          case None => ctx.classes(clazz.name) = clazz
+        }
     }
 
     // Make sure the base class exists. If not, ignore the inheritance.
@@ -119,9 +117,7 @@ class Namer(implicit config: Config)
         clazz.symbol.scope.find("main") match {
           case Some(symbol) =>
             symbol match {
-              case f: MethodSymbol
-                  if f.isStatic && (f.typ === FunType(Nil, VoidType)) =>
-                f.setMain()
+              case f: MethodSymbol if f.isStatic && (f.typ === FunType(Nil, VoidType)) => f.setMain()
               case _ => issue(NoMainClassError)
             }
           case _ => issue(NoMainClassError)
@@ -146,7 +142,7 @@ class Namer(implicit config: Config)
         val clazz = ctx.classes(node)
         clazz.parent match {
           case Some(Id(base)) => visit(clazz, base, time)
-          case _              => // done
+          case _ => // done
         }
       } else if (visitedTime(node) == time) { // find a cycle
         issue(new BadInheritanceError(from.pos))
@@ -210,12 +206,9 @@ class Namer(implicit config: Config)
             ctx.global(clazz.name)
         }
 
-        implicit val classCtx: ScopeContext =
-          new ScopeContext(ctx.global).open(symbol.scope)
+        implicit val classCtx: ScopeContext = new ScopeContext(ctx.global).open(symbol.scope)
         val fs = clazz.fields.flatMap(resolveField)
-        resolved(clazz.name) = Typed
-          .ClassDef(clazz.id, symbol.parent, fs)(symbol)
-          .setPos(clazz.pos)
+        resolved(clazz.name) = Typed.ClassDef(clazz.id, symbol.parent, fs)(symbol).setPos(clazz.pos)
       }
     }
 
@@ -230,19 +223,17 @@ class Namer(implicit config: Config)
     * @param ctx   scope context
     * @return resolved field
     */
-  def resolveField(
-      field: Field
-  )(implicit ctx: ScopeContext): Option[Typed.Field] = {
+  def resolveField(field: Field)(implicit ctx: ScopeContext): Option[Typed.Field] = {
     val resolved = ctx.findConflict(field.name) match {
-      case Some(earlier) =>
+      case Some(earlier) if earlier.domain == ctx.currentScope => // always conflict
+        issue(new DeclConflictError(field.name, earlier.pos, field.pos)); None
+      case Some(earlier) => // maybe override?
         (earlier, field) match {
-          case (_: MemberVarSymbol, _: VarSymbol) =>
+          case (_: MemberVarSymbol, _: VarDef) =>
             issue(new OverridingVarError(field.name, field.pos))
             None
-          case (
-              suspect: MethodSymbol,
-              m @ MethodDef(mod, id, returnType, params, body)
-              ) if !suspect.isStatic && !m.isStatic =>
+          case (suspect: MethodSymbol, m @ MethodDef(mod, id, returnType, params, body))
+            if !suspect.isStatic && !m.isStatic =>
             // Only non-static methods can be overriden, but the type signature must be equivalent.
             val ret = typeTypeLit(returnType)
             ret.typ match {
@@ -250,30 +241,20 @@ class Namer(implicit config: Config)
               case retType =>
                 val formalScope = new FormalScope
                 val formalCtx = ctx.open(formalScope)
-                if (!m.isStatic)
-                  formalCtx.declare(
-                    LocalVarSymbol.thisVar(ctx.currentClass.typ, id.pos)
-                  )
-                val typedParams = params.flatMap {
-                  resolveLocalVarDef(_)(formalCtx, true)
-                }
+                if (!m.isStatic) formalCtx.declare(LocalVarSymbol.thisVar(ctx.currentClass.typ, id.pos))
+                val typedParams = params.flatMap { resolveLocalVarDef(_)(formalCtx, true) }
                 val funType = FunType(typedParams.map(_.typeLit.typ), retType)
                 if (funType <= suspect.typ) { // override success
-                  val symbol =
-                    new MethodSymbol(m, funType, formalScope, ctx.currentClass)
+                  val symbol = new MethodSymbol(m, funType, formalScope, ctx.currentClass)
                   ctx.declare(symbol)
                   val block = resolveBlock(body)(formalCtx)
-                  Some(
-                    Typed.MethodDef(mod, id, ret, typedParams, block)(symbol)
-                  )
+                  Some(Typed.MethodDef(mod, id, ret, typedParams, block)(symbol))
                 } else { // override failure
                   issue(new BadOverrideError(m.name, suspect.owner.name, m.pos))
                   None
                 }
             }
-          case _ =>
-            issue(new DeclConflictError(field.name, earlier.pos, field.pos));
-            None
+          case _ => issue(new DeclConflictError(field.name, earlier.pos, field.pos)); None
         }
       case None =>
         field match {
@@ -291,25 +272,16 @@ class Namer(implicit config: Config)
             }
           case m @ MethodDef(mod, id, returnType, params, body) =>
             val rt = typeTypeLit(returnType)
-            rt.typ match {
-              case NoType => None
-              case retType =>
-                val formalScope = new FormalScope
-                val formalCtx: ScopeContext = ctx.open(formalScope)
-                if (!m.isStatic)
-                  formalCtx.declare(
-                    LocalVarSymbol.thisVar(ctx.currentClass.typ, id.pos)
-                  )
-                val typedParams = params.flatMap {
-                  resolveLocalVarDef(_)(formalCtx, true)
-                }
-                val funType = FunType(typedParams.map(_.typeLit.typ), retType)
-                val symbol =
-                  new MethodSymbol(m, funType, formalScope, ctx.currentClass)
-                ctx.declare(symbol)
-                val block = resolveBlock(body)(formalCtx)
-                Some(Typed.MethodDef(mod, id, rt, typedParams, block)(symbol))
-            }
+            val retType = rt.typ
+            val formalScope = new FormalScope
+            val formalCtx: ScopeContext = ctx.open(formalScope)
+            if (!m.isStatic) formalCtx.declare(LocalVarSymbol.thisVar(ctx.currentClass.typ, id.pos))
+            val typedParams = params.flatMap { resolveLocalVarDef(_)(formalCtx, true) }
+            val funType = FunType(typedParams.map(_.typeLit.typ), retType)
+            val symbol = new MethodSymbol(m, funType, formalScope, ctx.currentClass)
+            ctx.declare(symbol)
+            val block = resolveBlock(body)(formalCtx)
+            Some(Typed.MethodDef(mod, id, rt, typedParams, block)(symbol))
         }
     }
     resolved.map(_.setPos(field.pos))
@@ -336,16 +308,16 @@ class Namer(implicit config: Config)
 
   def resolveStmt(stmt: Stmt)(implicit ctx: ScopeContext): Typed.Stmt = {
     val checked = stmt match {
-      case block: Block     => resolveBlock(block)
-      case v: LocalVarDef   => resolveLocalVarDef(v).getOrElse(Typed.Skip())
+      case block: Block => resolveBlock(block)
+      case v: LocalVarDef => resolveLocalVarDef(v).getOrElse(Typed.Skip())
       case Assign(lhs, rhs) => Typed.Assign(lhs, rhs)
-      case ExprEval(expr)   => Typed.ExprEval(expr)
-      case Skip()           => Typed.Skip()
+      case ExprEval(expr) => Typed.ExprEval(expr)
+      case Skip() => Typed.Skip()
       case If(cond, trueBranch, falseBranch) =>
         val t = resolveBlock(trueBranch)
         val f = falseBranch.map(resolveBlock)
         Typed.If(cond, t, f)
-      case While(cond, body)             => Typed.While(cond, resolveBlock(body))
+      case While(cond, body) => Typed.While(cond, resolveBlock(body))
       case For(init, cond, update, body) =>
         // Since `init` and `update` may declare local variables, we must first open the local scope of `body`, and
         // then resolve `init`, `update` and statements inside `body`.
@@ -357,21 +329,27 @@ class Namer(implicit config: Config)
         val ss = body.stmts.map { resolveStmt(_)(localCtx) }
         val b = Typed.Block(ss)(localScope).setPos(body.pos)
         Typed.For(i, cond, u, b)
-      case Break()      => Typed.Break()
+      case Break() => Typed.Break()
       case Return(expr) => Typed.Return(expr)
       case Print(exprs) => Typed.Print(exprs)
     }
     checked.setPos(stmt.pos)
   }
 
-  def resolveLocalVarDef(v: LocalVarDef)(
-      implicit ctx: ScopeContext,
-      isParam: Boolean = false
-  ): Option[Typed.LocalVarDef] = {
+  def resolveLocalVarDef(v: LocalVarDef)
+                        (implicit ctx: ScopeContext, isParam: Boolean = false): Option[Typed.LocalVarDef] = {
     ctx.findConflict(v.name) match {
       case Some(earlier) =>
         issue(new DeclConflictError(v.name, earlier.pos, v.pos))
-        None
+        // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
+        // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
+        // expectation.
+        if (isParam) {
+          val typedTypeLit = typeTypeLit(v.typeLit)
+          Some(Typed.LocalVarDef(typedTypeLit, v.id, v.init, v.assignPos)(null))
+        } else {
+          None
+        }
       case None =>
         val typedTypeLit = typeTypeLit(v.typeLit)
         typedTypeLit.typ match {
@@ -384,9 +362,7 @@ class Namer(implicit config: Config)
           case t =>
             val symbol = new LocalVarSymbol(v, t)
             ctx.declare(symbol)
-            Some(
-              Typed.LocalVarDef(typedTypeLit, v.id, v.init, v.assignPos)(symbol)
-            )
+            Some(Typed.LocalVarDef(typedTypeLit, v.id, v.init, v.assignPos)(symbol))
         }
     }
   }

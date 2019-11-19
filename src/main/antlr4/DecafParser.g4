@@ -37,7 +37,9 @@ type:
 
 typeList: (type (',' type)*)?;
 
-stmt: // Statements
+// Statements
+
+stmt:
 	stmtBlock		# block
 	| simple ';'	# simpleStmt
 	| IF '(' cond = expr ')' trueBranch = stmt (
@@ -66,17 +68,17 @@ lValue: (expr '.')? id					# lValueVar
 expr:
 	lit															# literal
 	| THIS														# this
-	| '(' expr ')'												# paren
-	| '(' CLASS id ')' expr										# classCast
 	| READ_INTEGER '(' ')'										# readInt
 	| READ_LINE '(' ')'											# readLine
 	| NEW id '(' ')'											# newClass
 	| NEW elemType = type '[' length = expr ']'					# newArray
 	| INSTANCEOF '(' expr ',' id ')'							# classTest
+	| '(' expr ')'												# paren
 	| id														# singlePath
 	| expr '.' id												# path
 	| expr '(' exprList ')'										# call
 	| array = expr '[' index = expr ']'							# indexSel
+	| '(' CLASS id ')' expr										# classCast
 	| prefix = ('-' | '!') expr									# unary
 	| lhs = expr infix = ('*' | '/' | '%') rhs = expr			# binary
 	| lhs = expr infix = ('+' | '-') rhs = expr					# binary

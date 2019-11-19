@@ -211,7 +211,7 @@ class Parser(implicit config: Config)
       }
 
     override def visitLocalVarDef(ctx: DecafParser.LocalVarDefContext): Stmt = {
-      if (ctx.AUTO != null) {
+      if (ctx.VAR__KEYWORD != null) {
         val id = ctx.id.accept(IdVisitor)
         LocalVarDef(
           TVar(),

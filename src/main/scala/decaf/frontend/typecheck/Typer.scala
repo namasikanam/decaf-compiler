@@ -277,6 +277,39 @@ class Typer(implicit config: Config)
           issue(new ThisInStaticFuncError(expr.pos))
         This()(ctx.currentClass.typ) // make a fair guess
 
+      //   case call @ Syn.Call(Some(Syn.VarSel(None, id)), method, _) if ctx.global.contains(id) =>
+      //     // Special case: invoking a static method, like MyClass.foo()
+      //     val clazz = ctx.global(id)
+      //     clazz.scope.lookup(method) match {
+      //       case Some(symbol) => symbol match {
+      //         case m: MethodSymbol =>
+      //           if (m.isStatic) {
+      //             typeCall(call, None, m)
+      //           } else { issue(new NotClassFieldError(method, clazz.typ, expr.pos)); err }
+      //         case _ => issue(new NotClassMethodError(method, clazz.typ, expr.pos)); err
+      //       }
+      //       case None => issue(new FieldNotFoundError(method, clazz.typ, expr.pos)); err
+      //     }
+
+      //   case call @ Syn.Call(receiver, method, args) =>
+      //     val r = receiver.map(typeExpr)
+      //     r.map(_.typ).getOrElse(ctx.currentClass.typ) match {
+      //       case NoType => err
+      //       case _: ArrayType if method.name == "length" => // Special case: array.length()
+      //         assert(r.isDefined)
+      //         if (args.nonEmpty) issue(new BadLengthArgError(args.length, expr.pos))
+      //         ArrayLen(r.get)(IntType)
+      //       case t @ ClassType(c, _) =>
+      //         ctx.global(c).scope.lookup(method) match {
+      //           case Some(sym) => sym match {
+      //             case m: MethodSymbol => typeCall(call, r, m)
+      //             case _ => issue(new NotClassMethodError(method, t, expr.pos)); err
+      //           }
+      //           case None => issue(new FieldNotFoundError(method, t, expr.pos)); err
+      //         }
+      //       case t => issue(new NotClassFieldError(method, t, expr.pos)); err
+      //     }
+
       case Syn.ClassTest(obj, clazz) =>
         val o = typeExpr(obj)
         if (!o.typ.isClassType) issue(new NotClassError(o.typ, expr.pos))

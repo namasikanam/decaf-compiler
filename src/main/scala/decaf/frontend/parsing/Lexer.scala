@@ -88,7 +88,6 @@ class Lexer(in: CharStream, errorIssuer: ErrorIssuer) extends DecafLexer(in) {
     if (_mode == DecafLexer.IN_STRING) {
       setType(DecafLexer.UNTERM_STRING)
       setText("UNTERM_STRING")
-      //   println("That's it")
       val t = emit
       popMode()
       t
