@@ -54,11 +54,11 @@ stmt:
 stmtBlock: '{' stmt* '}';
 
 simple:
-	lValue '=' expr		# assign
-	| var ('=' expr)?	# localVarDef
-	| expr				# eval
-	| /* empty */		# skip
-	| AUTO id '=' expr	# localVarDef;
+	lValue '=' expr				# assign
+	| var ('=' expr)?			# localVarDef
+	| expr						# eval
+	| /* empty */				# skip
+	| VAR__KEYWORD id '=' expr	# localVarDef;
 
 lValue: (expr '.')? id					# lValueVar
 	| array = expr '[' index = expr ']'	# lValueIndex;
