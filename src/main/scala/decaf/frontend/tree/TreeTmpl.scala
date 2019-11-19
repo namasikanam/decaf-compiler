@@ -40,7 +40,7 @@ trait TreeTmpl {
     *
     * @param classes class definitions
     */
-  case class TopLevel(classes: List[ClassDef])(
+  case class TopLevel(var classes: List[ClassDef])(
       implicit val annot: TopLevelAnnot
   ) extends Node
       with Annotated[TopLevelAnnot]
