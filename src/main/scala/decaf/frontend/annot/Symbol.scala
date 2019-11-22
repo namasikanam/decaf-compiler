@@ -166,6 +166,8 @@ class MethodSymbol(
 
   val isStatic: Boolean = tree.isStatic
 
+  val isAbstract: Boolean = tree.isAbstract
+
   private var main = false
 
   /** Is this method the main method? */

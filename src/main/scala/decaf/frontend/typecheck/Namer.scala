@@ -76,7 +76,8 @@ class Namer(implicit config: Config)
     implicit val ctx = new Context
 
     // Delete 'Main' decorated by 'abstract'
-    tree.classes = tree.classes.filter(!_.modifiers.isAbstract);
+    tree.classes =
+      tree.classes.filter(c => !(c.name == "Main" && c.modifiers.isAbstract));
 
     // Check conflicting definitions. If any, ignore the redefined ones.
     tree.classes.foreach { clazz =>
@@ -114,6 +115,7 @@ class Namer(implicit config: Config)
     // Now, we can resolve every class definition to fill in its class scope table. To check if the overriding
     // behaves correctly, we should first resolve super class and then its subclasses.
     val resolvedClasses = resolveClasses
+    if (hasError) return Typed.TopLevel(Nil)(ctx.global)
 
     // Finally, let's locate the main class, whose name is 'Main', and contains a method like:
     //  static void main() { ... }
@@ -131,6 +133,7 @@ class Namer(implicit config: Config)
         }
       case None => issue(NoMainClassError)
     }
+    if (hasError) return Typed.TopLevel(Nil)(ctx.global)
 
     Typed.TopLevel(resolvedClasses)(ctx.global).setPos(tree.pos)
   }
@@ -209,7 +212,7 @@ class Namer(implicit config: Config)
 
     def resolve(clazz: ClassDef): Unit = {
       if (!resolved.contains(clazz.name)) {
-        var currentAbstractMethods = mutable.Set[String]()
+        implicit var currentAbstractMethods = mutable.Set[String]()
         clazz.parent match {
           case Some(Id(base)) =>
             resolve(ctx.classes(base))
@@ -218,22 +221,18 @@ class Namer(implicit config: Config)
         }
 
         val symbol: ClassSymbol = ctx.global(clazz.name)
+
+        // Resolve fields
+        // Prepare implicit arguments first.
         implicit val classCtx: ScopeContext =
           new ScopeContext(ctx.global).open(symbol.scope)
         val fs = clazz.fields.flatMap(resolveField)
-        resolved(clazz.name) =
-          Typed.ClassDef(clazz.id, symbol.parent, fs)(symbol).setPos(clazz.pos)
-
-        // Delete overrided abstract methods,
-        // and insert newly-defined abstract methods.
-        for (method <- clazz.methods) {
-          if (method.isAbstract) currentAbstractMethods += (method.id.name);
-          else currentAbstractMethods -= (method.id.name)
-        }
-        abstractMethods(clazz.name) = currentAbstractMethods
-        // Check abstract override
         if (!clazz.isAbstract && !currentAbstractMethods.isEmpty)
           issue(new AbstractOverrideError(clazz.id.name, clazz.pos))
+        abstractMethods(clazz.name) = currentAbstractMethods
+
+        resolved(clazz.name) =
+          Typed.ClassDef(clazz.id, symbol.parent, fs)(symbol).setPos(clazz.pos)
       }
     }
 
@@ -251,7 +250,10 @@ class Namer(implicit config: Config)
     */
   def resolveField(
       field: Field
-  )(implicit ctx: ScopeContext): Option[Typed.Field] = {
+  )(
+      implicit ctx: ScopeContext,
+      currentAbstractMethods: mutable.Set[String]
+  ): Option[Typed.Field] = {
     val resolved = ctx.findConflict(field.name) match {
       case Some(earlier)
           if earlier.domain == ctx.currentScope => // always conflict
@@ -264,7 +266,8 @@ class Namer(implicit config: Config)
           case (
               suspect: MethodSymbol,
               m @ MethodDef(mod, id, returnType, params, body)
-              ) if !suspect.isStatic && !m.isStatic =>
+              )
+              if !suspect.isStatic && !m.isStatic && (!m.isAbstract || suspect.isAbstract) =>
             // Only non-static methods can be overriden, but the type signature must be equivalent.
             val ret = typeTypeLit(returnType)
             ret.typ match {
@@ -281,6 +284,10 @@ class Namer(implicit config: Config)
                 }
                 val funType = FunType(typedParams.map(_.typeLit.typ), retType)
                 if (funType <= suspect.typ) { // override success
+                  // Maintain the set of abstract methods
+                  if (suspect.isAbstract && !m.isAbstract)
+                    currentAbstractMethods -= suspect.name
+
                   val symbol =
                     new MethodSymbol(m, funType, formalScope, ctx.currentClass)
                   ctx.declare(symbol)
@@ -321,6 +328,7 @@ class Namer(implicit config: Config)
               formalCtx.declare(
                 LocalVarSymbol.thisVar(ctx.currentClass.typ, id.pos)
               )
+            if (m.isAbstract) currentAbstractMethods += m.name
 
             val typedParams = params.flatMap {
               resolveLocalVarDef(_)(formalCtx, true)

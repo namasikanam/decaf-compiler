@@ -45,9 +45,8 @@ class Typer(implicit config: Config)
             val formalCtx = ctx.open(m.symbol.scope)
             val (checkedBody, returns) = checkBlock(body)(formalCtx)
             // Check if the body always returns a value, when the method is non-void
-            if (!m.symbol.returnType.isVoidType && !returns) {
+            if (!m.isAbstract && !m.symbol.returnType.isVoidType && !returns)
               issue(new MissingReturnError(checkedBody.pos))
-            }
             MethodDef(mod, id, returnType, params, checkedBody)(m.symbol)
               .setPos(m.pos)
         }
@@ -268,8 +267,12 @@ class Typer(implicit config: Config)
 
       case Syn.NewClass(id) =>
         ctx.global.find(id) match {
-          case Some(clazz) => NewClass(clazz)(clazz.typ)
-          case None        => issue(new ClassNotFoundError(id, expr.pos)); err
+          case Some(clazz) =>
+            if (clazz.isAbstract) {
+              issue(new NewAbstractError(id, expr.pos))
+              err
+            } else NewClass(clazz)(clazz.typ)
+          case None => issue(new ClassNotFoundError(id, expr.pos)); err
         }
 
       case Syn.This() =>

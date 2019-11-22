@@ -173,3 +173,6 @@ class BadLengthArgError(count: Int, pos: Pos)
       s"function 'length' expects 0 argument(s) but $count given",
       pos
     )
+
+class NewAbstractError(clazz: String, pos: Pos)
+    extends Error(s"cannot instantiate abstract class '$clazz'", pos)
