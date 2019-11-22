@@ -39,7 +39,7 @@ sealed trait Symbol extends Annot with Ordered[Symbol] {
     */
   var domain: Scope = _
 
-  override def toString: String = s"(${ pos.line },${ pos.column }) -> " + str
+  override def toString: String = s"(${pos.line},${pos.column}) -> " + str
 
   /** Symbols are compared by their positions. */
   override def compare(that: Symbol): Int = this.pos.compare(that.pos)
@@ -53,8 +53,12 @@ sealed trait Symbol extends Annot with Ordered[Symbol] {
   * @param scope  associated class scope of this class
   * @param parent symbols of super class (if any)
   */
-class ClassSymbol(tree: ClassDef, val typ: ClassType, val scope: ClassScope, val parent: Option[ClassSymbol] = None)
-  extends Symbol {
+class ClassSymbol(
+    tree: ClassDef,
+    val typ: ClassType,
+    val scope: ClassScope,
+    val parent: Option[ClassSymbol] = None
+) extends Symbol {
 
   type Typ = ClassType
 
@@ -62,9 +66,12 @@ class ClassSymbol(tree: ClassDef, val typ: ClassType, val scope: ClassScope, val
 
   override def pos: Pos = tree.pos
 
-  override def str: String = s"class $name" + (if (parent.isDefined) s" : ${ parent.get.name }" else "")
+  override def str: String =
+    s"class $name" + (if (parent.isDefined) s" : ${parent.get.name}" else "")
 
   scope.owner = this
+
+  def isAbstract: Boolean = tree.isAbstract
 
   /** Returns the [[ClassInfo]] of this class, used by [[decaf.frontend.tac.TacGen]] */
   def getInfo: ClassInfo = {
@@ -82,7 +89,14 @@ class ClassSymbol(tree: ClassDef, val typ: ClassType, val scope: ClassScope, val
         }
     }
 
-    new ClassInfo(name, parent.map(_.name), memberVariables, memberMethods, staticMethods, name == "Main")
+    new ClassInfo(
+      name,
+      parent.map(_.name),
+      memberVariables,
+      memberMethods,
+      staticMethods,
+      name == "Main"
+    )
   }
 }
 
@@ -107,7 +121,9 @@ trait VarSymbol extends Symbol
   * @param typ   type
   * @param owner owner, a class symbol
   */
-class MemberVarSymbol(tree: Var, val typ: Type, val owner: ClassSymbol) extends FieldSymbol with VarSymbol {
+class MemberVarSymbol(tree: Var, val typ: Type, val owner: ClassSymbol)
+    extends FieldSymbol
+    with VarSymbol {
 
   type Typ = Type
 
@@ -126,8 +142,12 @@ class MemberVarSymbol(tree: Var, val typ: Type, val owner: ClassSymbol) extends 
   * @param scope associated formal scope of the method parameters
   * @param owner owner, a class symbol
   */
-class MethodSymbol(tree: SyntaxTree.MethodDef, val typ: FunType, val scope: FormalScope, val owner: ClassSymbol)
-  extends FieldSymbol {
+class MethodSymbol(
+    tree: SyntaxTree.MethodDef,
+    val typ: FunType,
+    val scope: FormalScope,
+    val owner: ClassSymbol
+) extends FieldSymbol {
 
   type Typ = FunType
 
@@ -136,7 +156,7 @@ class MethodSymbol(tree: SyntaxTree.MethodDef, val typ: FunType, val scope: Form
   override def pos: Pos = tree.pos
 
   override def str: String =
-    (if (tree.modifiers.isEmpty) "" else s"${ tree.modifiers } ") + s"function $name : " + typ.toString
+    (if (tree.modifiers.isEmpty) "" else s"${tree.modifiers} ") + s"function $name : " + typ.toString
 
   scope.owner = this
 
@@ -161,7 +181,9 @@ class MethodSymbol(tree: SyntaxTree.MethodDef, val typ: FunType, val scope: Form
   * @param typ  type
   * @param pos  position
   */
-class LocalVarSymbol(val name: String, val typ: Type, val pos: Pos) extends Symbol with VarSymbol {
+class LocalVarSymbol(val name: String, val typ: Type, val pos: Pos)
+    extends Symbol
+    with VarSymbol {
 
   type Typ = Type
 
@@ -171,13 +193,15 @@ class LocalVarSymbol(val name: String, val typ: Type, val pos: Pos) extends Symb
   /** Is this a parameter? */
   def isParam: Boolean = domain.isFormal
 
-  override def str: String = s"variable " + (if (isParam) "@" else "") + s"$name : $typ"
+  override def str: String =
+    s"variable " + (if (isParam) "@" else "") + s"$name : $typ"
 }
 
 object LocalVarSymbol {
 
   /** Create a special "this" symbol its type and position. */
-  def thisVar(typ: Type, pos: Pos): LocalVarSymbol = new LocalVarSymbol("this", typ, pos)
+  def thisVar(typ: Type, pos: Pos): LocalVarSymbol =
+    new LocalVarSymbol("this", typ, pos)
 }
 
 object SymbolImplicit {

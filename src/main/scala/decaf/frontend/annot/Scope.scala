@@ -4,6 +4,8 @@ import decaf.frontend.parsing.Pos
 
 import scala.collection.mutable
 
+import decaf.driver.error._
+
 /**
   * Scopes.
   *
@@ -68,7 +70,8 @@ sealed trait Scope extends Annot {
     * @tparam T result element type
     * @return a list of results
     */
-  def flatMap[T](p: Item => Option[T]): List[T] = symbols.values.flatMap(p).toList
+  def flatMap[T](p: Item => Option[T]): List[T] =
+    symbols.values.flatMap(p).toList
 
   /**
     * Declare a symbol in this scope.
@@ -86,9 +89,10 @@ sealed trait Scope extends Annot {
   /** Is this a formal scope? */
   def isFormal: Boolean = false
 
-  override def toString: String = "{ " + symbols.map {
-    case (name, symbol) => s"  $name -> $symbol"
-  } mkString "\n" + " }"
+  override def toString: String =
+    "{ " + symbols.map {
+      case (name, symbol) => s"  $name -> $symbol"
+    } mkString "\n" + " }"
 
   /**
     * Actual symbol table: maps names to their symbols.
@@ -119,7 +123,8 @@ class ClassScope(val parent: Option[ClassScope] = None) extends Scope {
     * @param key symbol's name
     * @return innermost found symbol (if any)
     */
-  def lookup(key: String): Option[FieldSymbol] = find(key).orElse(parent.flatMap(_.lookup(key)))
+  def lookup(key: String): Option[FieldSymbol] =
+    find(key).orElse(parent.flatMap(_.lookup(key)))
 
   /**
     * Owner, a class symbol whose members are defined in this class scope.
@@ -170,7 +175,8 @@ class LocalScope extends Scope {
     * }}}
     * although block 2 is not a direct child of block 1, block 2 is still directly nested in block 1.
     */
-  val nestedScopes: mutable.ArrayBuffer[LocalScope] = new mutable.ArrayBuffer[LocalScope]
+  val nestedScopes: mutable.ArrayBuffer[LocalScope] =
+    new mutable.ArrayBuffer[LocalScope]
 }
 
 /**
@@ -196,10 +202,16 @@ class LocalScope extends Scope {
   * @param currentMethod the current method symbol, i.e. owner of the latest formal scope
   * @see [[Scope]]
   */
-class ScopeContext private(val global: GlobalScope, private val scopes: List[Scope], val currentScope: Scope,
-                           val currentClass: ClassSymbol, val currentMethod: MethodSymbol) {
+class ScopeContext private (
+    val global: GlobalScope,
+    private val scopes: List[Scope],
+    val currentScope: Scope,
+    val currentClass: ClassSymbol,
+    val currentMethod: MethodSymbol
+) {
 
-  def this(globalScope: GlobalScope) = this(globalScope, Nil, globalScope, null, null)
+  def this(globalScope: GlobalScope) =
+    this(globalScope, Nil, globalScope, null, null)
 
   /**
     * Open a new scope.
@@ -208,12 +220,16 @@ class ScopeContext private(val global: GlobalScope, private val scopes: List[Sco
     * @return a new scope context after opening `scope`
     */
   def open(scope: Scope): ScopeContext = scope match {
-    case s: ClassScope => s.parent match {
-      case Some(ps) => new ScopeContext(global, s :: open(ps).scopes, s, s.owner, null)
-      case None => new ScopeContext(global, s :: scopes, s, s.owner, null)
-    }
-    case s: FormalScope => new ScopeContext(global, s :: scopes, s, currentClass, s.owner)
-    case s: LocalScope => new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
+    case s: ClassScope =>
+      s.parent match {
+        case Some(ps) =>
+          new ScopeContext(global, s :: open(ps).scopes, s, s.owner, null)
+        case None => new ScopeContext(global, s :: scopes, s, s.owner, null)
+      }
+    case s: FormalScope =>
+      new ScopeContext(global, s :: scopes, s, currentClass, s.owner)
+    case s: LocalScope =>
+      new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
   }
 
   /**
@@ -227,8 +243,12 @@ class ScopeContext private(val global: GlobalScope, private val scopes: List[Sco
     * @return innermost found symbol (if any)
     */
   @scala.annotation.tailrec
-  private def findWhile(key: String, cond: Scope => Boolean = _ => true, p: Symbol => Boolean = _ => true,
-                        scopes: List[Scope] = scopes :+ global): Option[Symbol] =
+  private def findWhile(
+      key: String,
+      cond: Scope => Boolean = _ => true,
+      p: Symbol => Boolean = _ => true,
+      scopes: List[Scope] = scopes :+ global
+  ): Option[Symbol] =
     scopes match {
       case Nil => None
       case s :: ss =>
@@ -237,7 +257,7 @@ class ScopeContext private(val global: GlobalScope, private val scopes: List[Sco
         } else {
           s.find(key) match {
             case Some(symbol) if p(symbol) => Some(symbol)
-            case _ => findWhile(key, cond, p, ss)
+            case _                         => findWhile(key, cond, p, ss)
           }
         }
     }
@@ -258,8 +278,8 @@ class ScopeContext private(val global: GlobalScope, private val scopes: List[Sco
     * @param pos position
     * @return innermost found symbol before `pos` (if any)
     */
-  def lookupBefore(key: String, pos: Pos): Option[Symbol] = findWhile(key, _ => true,
-    s => !(s.domain.isLocalOrFormal && s.pos >= pos))
+  def lookupBefore(key: String, pos: Pos): Option[Symbol] =
+    findWhile(key, _ => true, s => !(s.domain.isLocalOrFormal && s.pos >= pos))
 
   /**
     * Find a symbol that conflicts with some already defined symbol. Rules:
@@ -275,7 +295,8 @@ class ScopeContext private(val global: GlobalScope, private val scopes: List[Sco
     * @return innermost conflicting symbol (if any)
     */
   def findConflict(key: String): Option[Symbol] = currentScope match {
-    case s if s.isLocalOrFormal => findWhile(key, _.isLocalOrFormal).orElse(global.find(key))
+    case s if s.isLocalOrFormal =>
+      findWhile(key, _.isLocalOrFormal).orElse(global.find(key))
     case _ => lookup(key)
   }
 
@@ -284,7 +305,8 @@ class ScopeContext private(val global: GlobalScope, private val scopes: List[Sco
     *
     * @param symbol symbol
     */
-  def declare(symbol: Symbol): Unit = currentScope.declare(symbol.asInstanceOf[currentScope.Item])
+  def declare(symbol: Symbol): Unit =
+    currentScope.declare(symbol.asInstanceOf[currentScope.Item])
 }
 
 object ScopeImplicit {

@@ -77,7 +77,6 @@ class Namer(implicit config: Config)
 
     // Delete 'Main' decorated by 'abstract'
     tree.classes = tree.classes.filter(!_.modifiers.isAbstract);
-    // val tree = Tree(tree.classes.filter(!_.modifiers.isAbstract))(tree.annot);
 
     // Check conflicting definitions. If any, ignore the redefined ones.
     tree.classes.foreach { clazz =>
@@ -197,28 +196,44 @@ class Namer(implicit config: Config)
 
   /**
     * Resolve class definitions.
+    * This a parameterless method,
+    * which even parenthesises are omitted.
     *
     * @param ctx context
     * @return resolved classes
     */
   def resolveClasses(implicit ctx: Context): List[Typed.ClassDef] = {
     val resolved = new mutable.TreeMap[String, Typed.ClassDef]
+    val abstractMethods =
+      new mutable.TreeMap[String, mutable.Set[String]]
 
     def resolve(clazz: ClassDef): Unit = {
       if (!resolved.contains(clazz.name)) {
-        val symbol = clazz.parent match {
+        var currentAbstractMethods = mutable.Set[String]()
+        clazz.parent match {
           case Some(Id(base)) =>
             resolve(ctx.classes(base))
-            ctx.global(clazz.name)
-          case None =>
-            ctx.global(clazz.name)
+            currentAbstractMethods = abstractMethods(base)
+          case None => ;
         }
 
+        val symbol: ClassSymbol = ctx.global(clazz.name)
         implicit val classCtx: ScopeContext =
           new ScopeContext(ctx.global).open(symbol.scope)
         val fs = clazz.fields.flatMap(resolveField)
         resolved(clazz.name) =
           Typed.ClassDef(clazz.id, symbol.parent, fs)(symbol).setPos(clazz.pos)
+
+        // Delete overrided abstract methods,
+        // and insert newly-defined abstract methods.
+        for (method <- clazz.methods) {
+          if (method.isAbstract) currentAbstractMethods += (method.id.name);
+          else currentAbstractMethods -= (method.id.name)
+        }
+        abstractMethods(clazz.name) = currentAbstractMethods
+        // Check abstract override
+        if (!clazz.isAbstract && !currentAbstractMethods.isEmpty)
+          issue(new AbstractOverrideError(clazz.id.name, clazz.pos))
       }
     }
 
@@ -228,6 +243,7 @@ class Namer(implicit config: Config)
 
   /**
     * Resolve a field definition.
+    * A "field" of class contains the variables and methods defined in it.
     *
     * @param field field
     * @param ctx   scope context
@@ -300,10 +316,12 @@ class Namer(implicit config: Config)
             val retType = rt.typ
             val formalScope = new FormalScope
             val formalCtx: ScopeContext = ctx.open(formalScope)
+
             if (!m.isStatic)
               formalCtx.declare(
                 LocalVarSymbol.thisVar(ctx.currentClass.typ, id.pos)
               )
+
             val typedParams = params.flatMap {
               resolveLocalVarDef(_)(formalCtx, true)
             }

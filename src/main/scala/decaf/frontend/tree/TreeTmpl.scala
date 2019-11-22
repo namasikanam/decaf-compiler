@@ -75,6 +75,8 @@ trait TreeTmpl {
       case _            => None
     }
 
+    def isAbstract: Boolean = modifiers.isAbstract
+
     override def productArity: Int = 4
 
     override def productElement(n: Int): Any = n match {
@@ -87,6 +89,7 @@ trait TreeTmpl {
 
   /**
     * Field/Member of a class.
+    * A function is recognized as a field, too.
     */
   trait Field extends Def
 
