@@ -208,16 +208,13 @@ class Namer(implicit config: Config)
   def resolveClasses(implicit ctx: Context): List[Typed.ClassDef] = {
     val resolved = new mutable.TreeMap[String, Typed.ClassDef]
     val abstractMethods =
-      new mutable.TreeMap[String, mutable.Set[String]]
+      new mutable.TreeMap[String, Set[String]]
 
     def resolve(clazz: ClassDef): Unit = {
       if (!resolved.contains(clazz.name)) {
-        implicit var currentAbstractMethods = mutable.Set[String]()
         clazz.parent match {
-          case Some(Id(base)) =>
-            resolve(ctx.classes(base))
-            currentAbstractMethods = abstractMethods(base)
-          case None => ;
+          case Some(Id(base)) => resolve(ctx.classes(base))
+          case None           => ;
         }
 
         val symbol: ClassSymbol = ctx.global(clazz.name)
@@ -226,10 +223,34 @@ class Namer(implicit config: Config)
         // Prepare implicit arguments first.
         implicit val classCtx: ScopeContext =
           new ScopeContext(ctx.global).open(symbol.scope)
+        implicit val currentAbstractMethods: mutable.Set[String] =
+          clazz.parent match {
+            case Some(Id(base)) =>
+              printf("base of %s is %s\n", clazz.name, base)
+              mutable.Set[String]() ++ abstractMethods(base)
+            case None => mutable.Set[String]()
+          }
+
+        // printf(
+        //   "Before resolve, the abstract methods of class %s is: ",
+        //   clazz.name
+        // )
+        // for (abstractMethod <- currentAbstractMethods)
+        //   printf("%s ", abstractMethod)
+        // printf("\n")
+
         val fs = clazz.fields.flatMap(resolveField)
         if (!clazz.isAbstract && !currentAbstractMethods.isEmpty)
           issue(new AbstractOverrideError(clazz.id.name, clazz.pos))
-        abstractMethods(clazz.name) = currentAbstractMethods
+        abstractMethods(clazz.name) = currentAbstractMethods.toSet
+
+        // printf(
+        //   "After resolve, the abstract methods of class %s is: ",
+        //   clazz.name
+        // )
+        // for (abstractMethod <- currentAbstractMethods)
+        //   printf("%s ", abstractMethod)
+        // printf("\n")
 
         resolved(clazz.name) =
           Typed.ClassDef(clazz.id, symbol.parent, fs)(symbol).setPos(clazz.pos)
