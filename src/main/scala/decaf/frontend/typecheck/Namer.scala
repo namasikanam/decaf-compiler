@@ -226,7 +226,6 @@ class Namer(implicit config: Config)
         implicit val currentAbstractMethods: mutable.Set[String] =
           clazz.parent match {
             case Some(Id(base)) =>
-              printf("base of %s is %s\n", clazz.name, base)
               mutable.Set[String]() ++ abstractMethods(base)
             case None => mutable.Set[String]()
           }

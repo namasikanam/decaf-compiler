@@ -67,7 +67,9 @@ class ClassSymbol(
   override def pos: Pos = tree.pos
 
   override def str: String =
-    s"class $name" + (if (parent.isDefined) s" : ${parent.get.name}" else "")
+    (if (isAbstract) "ABSTRACT " else "") + s"class $name" + (if (parent.isDefined)
+                                                                s" : ${parent.get.name}"
+                                                              else "")
 
   scope.owner = this
 
