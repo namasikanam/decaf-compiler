@@ -69,6 +69,7 @@ trait Util extends ErrorIssuer {
       case VarType  => Typed.TVar()(VarType)
       case NoType =>
         Typed.TVar()(VarType) // I'm not sure here, it's supposed to be not going to happen
+      case NullType => Typed.TNull()(NullType)
       case t @ FunType(args, ret) =>
         Typed.TLambda(fromTypeToTypeLit(ret), args.map(fromTypeToTypeLit))(t)
     }

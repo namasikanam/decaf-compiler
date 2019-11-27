@@ -205,6 +205,12 @@ trait TreeTmpl {
   case class TVar()(implicit val annot: TypeLitAnnot) extends TypeLit
 
   /**
+    * Null type: {{{ 'null' }}}
+    *
+    */
+  case class TNull()(implicit val annot: TypeLitAnnot) extends TypeLit
+
+  /**
     * Lambda type: {{{ type ( type, ...) }}}
     *
     * @param returnType the type of return value
