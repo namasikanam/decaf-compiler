@@ -280,38 +280,110 @@ class Typer(implicit config: Config)
           issue(new ThisInStaticFuncError(expr.pos))
         This()(ctx.currentClass.typ) // make a fair guess
 
-      //   case call @ Syn.Call(Some(Syn.VarSel(None, id)), method, _) if ctx.global.contains(id) =>
-      //     // Special case: invoking a static method, like MyClass.foo()
-      //     val clazz = ctx.global(id)
-      //     clazz.scope.lookup(method) match {
-      //       case Some(symbol) => symbol match {
-      //         case m: MethodSymbol =>
-      //           if (m.isStatic) {
-      //             typeCall(call, None, m)
-      //           } else { issue(new NotClassFieldError(method, clazz.typ, expr.pos)); err }
-      //         case _ => issue(new NotClassMethodError(method, clazz.typ, expr.pos)); err
-      //       }
-      //       case None => issue(new FieldNotFoundError(method, clazz.typ, expr.pos)); err
-      //     }
+      // singlePath
+      case Syn.VarSel(None, id) =>
+        // Be careful we may be inside the initializer, if so, load the correct "before position".
+        ctx.lookupBefore(id, correctBeforePos.getOrElse(expr.pos)) match {
+          case Some(sym) =>
+            sym match {
+              case v: LocalVarSymbol => LocalVar(v)(v.typ)
+              case v: MemberVarSymbol =>
+                if (ctx.currentMethod.isStatic) // member vars cannot be accessed in a static method
+                  {
+                    issue(
+                      new RefNonStaticError(
+                        id,
+                        ctx.currentMethod.name,
+                        expr.pos
+                      )
+                    )
+                  }
+                MemberVar(This(), v)(v.typ)
+              case _ => issue(new UndeclVarError(id, expr.pos)); err
+            }
+          case None => issue(new UndeclVarError(id, expr.pos)); err
+        }
 
-      //   case call @ Syn.Call(receiver, method, args) =>
-      //     val r = receiver.map(typeExpr)
-      //     r.map(_.typ).getOrElse(ctx.currentClass.typ) match {
-      //       case NoType => err
-      //       case _: ArrayType if method.name == "length" => // Special case: array.length()
-      //         assert(r.isDefined)
-      //         if (args.nonEmpty) issue(new BadLengthArgError(args.length, expr.pos))
-      //         ArrayLen(r.get)(IntType)
-      //       case t @ ClassType(c, _) =>
-      //         ctx.global(c).scope.lookup(method) match {
-      //           case Some(sym) => sym match {
-      //             case m: MethodSymbol => typeCall(call, r, m)
-      //             case _ => issue(new NotClassMethodError(method, t, expr.pos)); err
-      //           }
-      //           case None => issue(new FieldNotFoundError(method, t, expr.pos)); err
-      //         }
-      //       case t => issue(new NotClassFieldError(method, t, expr.pos)); err
-      //     }
+      // Path
+      case Syn.VarSel(Some(Syn.VarSel(None, id)), f)
+          if ctx.global.contains(id) =>
+        // special case like MyClass.foo: report error cannot access field 'foo' from 'class : MyClass'
+        issue(new NotClassFieldError(f, ctx.global(id).typ, expr.pos))
+        err
+
+      case Syn.VarSel(Some(receiver), id) =>
+        val r = typeExpr(receiver)
+        r.typ match {
+          case NoType => err
+          case t @ ClassType(c, _) =>
+            ctx.global(c).scope.lookup(id) match {
+              case Some(sym) =>
+                sym match {
+                  case v: MemberVarSymbol =>
+                    if (!(ctx.currentClass.typ <= t)) // member vars are protected
+                      {
+                        issue(new FieldNotAccessError(id, t, expr.pos))
+                      }
+                    MemberVar(r, v)(v.typ)
+                  case _ => issue(new FieldNotFoundError(id, t, expr.pos)); err
+                }
+              case None => issue(new FieldNotFoundError(id, t, expr.pos)); err
+            }
+          case t => issue(new NotClassFieldError(id, t, expr.pos)); err
+        }
+
+      // Call
+      case call @ Syn.Call(Syn.VarSel(Some(Syn.VarSel(None, id)), method), _)
+          if ctx.global.contains(id) =>
+        // Special case: invoking a static method, like MyClass.foo()
+        val clazz = ctx.global(id)
+        clazz.scope.lookup(method) match {
+          case Some(symbol) =>
+            symbol match {
+              case m: MethodSymbol =>
+                if (m.isStatic) {
+                  typeCall(call, None, m)
+                } else {
+                  issue(new NotClassFieldError(method, clazz.typ, expr.pos));
+                  err
+                }
+              case _ =>
+                issue(new NotClassMethodError(method, clazz.typ, expr.pos)); err
+            }
+          case None =>
+            issue(new FieldNotFoundError(method, clazz.typ, expr.pos)); err
+        }
+
+      case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
+        val r = receiver.map(typeExpr)
+        r.map(_.typ).getOrElse(ctx.currentClass.typ) match {
+          case NoType => err
+          case _: ArrayType
+              if method.name == "length" => // Special case: array.length()
+            assert(r.isDefined)
+            if (args.nonEmpty)
+              issue(new BadLengthArgError(args.length, expr.pos))
+            ArrayLen(r.get)(IntType)
+          case t @ ClassType(c, _) =>
+            ctx.global(c).scope.lookup(method) match {
+              case Some(sym) =>
+                sym match {
+                  case m: MethodSymbol => typeCall(call, r, m)
+                  case _ =>
+                    issue(new NotClassMethodError(method, t, expr.pos)); err
+                }
+              case None =>
+                issue(new FieldNotFoundError(method, t, expr.pos)); err
+            }
+          case t => issue(new NotClassFieldError(method, t, expr.pos)); err
+        }
+
+      // TODO: I don't know how to call a simple function here……
+      //   case call @ Syn.Call(func, args) =>
+      //     val f = typeExpr(func)
+      //     val as = args.map(typeExpr)
+      //     if (!f.typ.isFuncType) issue(new CallUncallable(f.typ, expr.pos))
+      //     TypedTree.Call(f, as)(f.typ)
 
       case Syn.ClassTest(obj, clazz) =>
         val o = typeExpr(obj)

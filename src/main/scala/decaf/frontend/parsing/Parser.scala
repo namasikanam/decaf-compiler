@@ -402,6 +402,12 @@ class Parser(implicit config: Config)
       v.withReceiver(receiver)
     }
 
+    override def visitIndexSel(ctx: DecafParser.IndexSelContext): Expr = {
+      val array = ctx.array.accept(this)
+      val index = ctx.index.accept(this)
+      IndexSel(array, index).setPos(getPos(ctx.LBRACK.getSymbol))
+    }
+
     override def visitCall(
         ctx: DecafParser.CallContext
     ): Expr = {
@@ -409,12 +415,6 @@ class Parser(implicit config: Config)
       val exprList = ctx.exprList.accept(ExprListVisitor)
       Call(expr, exprList)
         .setPos(getPos(ctx.LPAREN.getSymbol))
-    }
-
-    override def visitIndexSel(ctx: DecafParser.IndexSelContext): Expr = {
-      val array = ctx.array.accept(this)
-      val index = ctx.index.accept(this)
-      IndexSel(array, index).setPos(getPos(ctx.LBRACK.getSymbol))
     }
 
     override def visitUnary(ctx: DecafParser.UnaryContext): Expr =
