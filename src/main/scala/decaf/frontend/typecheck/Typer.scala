@@ -114,12 +114,30 @@ class Typer(implicit config: Config)
             val r = typeExpr(expr)
             correctBeforePos = None // recover
 
-            if (!(r.typ <= v.typeLit.typ))
+            val typeLit = v.typeLit match {
+              case TVar() =>
+                val t = fromTypeToTypeLit(r.typ)
+                t match {
+                  case TVoid() | TVar() =>
+                    issue(new DeclVoidTypeError(v.id.name, v.pos))
+                  case _ => ;
+                }
+                t
+              case t => t
+            }
+            if (!(r.typ <= typeLit.typ)) {
               issue(
-                new IncompatBinOpError("=", v.typeLit.typ, r.typ, v.assignPos)
+                new IncompatBinOpError("=", typeLit.typ, r.typ, v.assignPos)
               )
-            (LocalVarDef(v.typeLit, v.id, Some(r))(v.symbol), false)
-          case None => (v, false)
+            } else
+              ctx.declare(new LocalVarSymbol(v, r.typ))
+            (LocalVarDef(typeLit, v.id, Some(r))(v.symbol), false)
+          case None =>
+            v.typeLit match {
+              case TVar() => issue(new DeclVoidTypeError(v.id.name, v.pos))
+              case _      => ;
+            }
+            (v, false)
         }
 
       case Assign(lhs, rhs) =>
@@ -360,10 +378,10 @@ class Typer(implicit config: Config)
                 err
             }
           case None =>
-            printf(
-              "FieldNotFoundError in call1: expr = \"%s\"\n",
-              expr.toString
-            )
+            // printf(
+            //   "FieldNotFoundError in call1: expr = \"%s\"\n",
+            //   expr.toString
+            // )
             issue(new FieldNotFoundError(method, clazz.typ, method.pos)); err
         }
 

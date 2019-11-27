@@ -425,7 +425,14 @@ class Namer(implicit config: Config)
         // expectation.
         if (isParam) {
           val typedTypeLit = typeTypeLit(v.typeLit)
-          Some(Typed.LocalVarDef(typedTypeLit, v.id, v.init, v.assignPos)(null))
+          Some(
+            Typed.LocalVarDef(
+              typedTypeLit,
+              v.id,
+              v.init,
+              v.assignPos
+            )(null)
+          )
         } else {
           None
         }
@@ -442,7 +449,12 @@ class Namer(implicit config: Config)
             val symbol = new LocalVarSymbol(v, t)
             ctx.declare(symbol)
             Some(
-              Typed.LocalVarDef(typedTypeLit, v.id, v.init, v.assignPos)(symbol)
+              Typed.LocalVarDef(
+                typedTypeLit,
+                v.id,
+                v.init,
+                v.assignPos
+              )(symbol)
             )
         }
     }

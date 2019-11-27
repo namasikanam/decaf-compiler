@@ -179,3 +179,6 @@ class NewAbstractError(clazz: String, pos: Pos)
 
 class CallUncallableError(typ: Type, pos: Pos)
     extends Error(s"$typ is not a callable type", pos)
+
+class DeclVoidTypeError(id: String, pos: Pos)
+    extends Error(s"cannot declare identifier '$id' as void type", pos)

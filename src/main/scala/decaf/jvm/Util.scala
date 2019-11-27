@@ -12,7 +12,8 @@ trait Util {
   /**
     * Internal name of Java's super class -- the well-known `java.lang.Object`.
     */
-  val JAVA_SUPER_INTERNAL_NAME = ASMType.getInternalName(classOf[java.lang.Object])
+  val JAVA_SUPER_INTERNAL_NAME =
+    ASMType.getInternalName(classOf[java.lang.Object])
 
   /**
     * Default name of constructors.
@@ -45,7 +46,9 @@ trait Util {
     * @param falseBranch code (to be generated) of the true branch
     * @param mv          method visitor
     */
-  def ifThenElse(trueBranch: => Unit, falseBranch: => Unit)(implicit mv: MethodVisitor): Unit = {
+  def ifThenElse(trueBranch: => Unit, falseBranch: => Unit)(
+      implicit mv: MethodVisitor
+  ): Unit = {
     val trueLabel = new Label
     val exitLabel = new Label
 
@@ -74,7 +77,9 @@ trait Util {
     * @param exit label of loop exit
     * @param mv   method visitor
     */
-  def loop(cond: => Unit, exit: Label)(body: => Unit)(implicit mv: MethodVisitor): Unit = {
+  def loop(cond: => Unit, exit: Label)(
+      body: => Unit
+  )(implicit mv: MethodVisitor): Unit = {
     val enter = new Label
 
     mv.visitLabel(enter)
@@ -102,12 +107,28 @@ trait Util {
 
     mv.visitTypeInsn(Opcodes.NEW, ASMType.getInternalName(scanner))
     mv.visitInsn(Opcodes.DUP)
-    mv.visitFieldInsn(Opcodes.GETSTATIC, ASMType.getInternalName(system), "in",
-      ASMType.getDescriptor(system_in))
-    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, ASMType.getInternalName(scanner), CONSTRUCTOR_NAME,
-      ASMType.getConstructorDescriptor(scanner.getDeclaredConstructor(system_in)), false)
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, ASMType.getInternalName(scanner), method,
-      ASMType.getMethodDescriptor(scanner.getDeclaredMethod(method)), false)
+    mv.visitFieldInsn(
+      Opcodes.GETSTATIC,
+      ASMType.getInternalName(system),
+      "in",
+      ASMType.getDescriptor(system_in)
+    )
+    mv.visitMethodInsn(
+      Opcodes.INVOKESPECIAL,
+      ASMType.getInternalName(scanner),
+      CONSTRUCTOR_NAME,
+      ASMType.getConstructorDescriptor(
+        scanner.getDeclaredConstructor(system_in)
+      ),
+      false
+    )
+    mv.visitMethodInsn(
+      Opcodes.INVOKEVIRTUAL,
+      ASMType.getInternalName(scanner),
+      method,
+      ASMType.getMethodDescriptor(scanner.getDeclaredMethod(method)),
+      false
+    )
   }
 
   /**
@@ -126,30 +147,58 @@ trait Util {
     val system_out = system.getDeclaredField("out").getType
     val string = classOf[java.lang.String]
 
-    mv.visitFieldInsn(Opcodes.GETSTATIC, ASMType.getInternalName(system), "out", ASMType.getDescriptor(system_out))
+    mv.visitFieldInsn(
+      Opcodes.GETSTATIC,
+      ASMType.getInternalName(system),
+      "out",
+      ASMType.getDescriptor(system_out)
+    )
     arg
     typ match {
       case IntType =>
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, ASMType.getInternalName(string), "valueOf",
-          ASMType.getMethodDescriptor(string.getDeclaredMethod("valueOf", classOf[Int])), false)
+        mv.visitMethodInsn(
+          Opcodes.INVOKESTATIC,
+          ASMType.getInternalName(string),
+          "valueOf",
+          ASMType.getMethodDescriptor(
+            string.getDeclaredMethod("valueOf", classOf[Int])
+          ),
+          false
+        )
       case BoolType =>
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, ASMType.getInternalName(string), "valueOf",
-          ASMType.getMethodDescriptor(string.getDeclaredMethod("valueOf", classOf[Boolean])), false)
+        mv.visitMethodInsn(
+          Opcodes.INVOKESTATIC,
+          ASMType.getInternalName(string),
+          "valueOf",
+          ASMType.getMethodDescriptor(
+            string.getDeclaredMethod("valueOf", classOf[Boolean])
+          ),
+          false
+        )
       case StringType => // nop
     }
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, ASMType.getInternalName(system_out), "print",
-      ASMType.getMethodDescriptor(system_out.getDeclaredMethod("print", string)), false)
+    mv.visitMethodInsn(
+      Opcodes.INVOKEVIRTUAL,
+      ASMType.getInternalName(system_out),
+      "print",
+      ASMType.getMethodDescriptor(
+        system_out.getDeclaredMethod("print", string)
+      ),
+      false
+    )
   }
 
   /** Translate a Decaf type to JVM assembly type. */
   def toASMType(typ: Type): ASMType = typ match {
-    case IntType => ASMType.INT_TYPE
-    case BoolType => ASMType.BOOLEAN_TYPE
-    case StringType => ASMType.getType(classOf[java.lang.String])
-    case VoidType => ASMType.VOID_TYPE
+    case IntType            => ASMType.INT_TYPE
+    case BoolType           => ASMType.BOOLEAN_TYPE
+    case StringType         => ASMType.getType(classOf[java.lang.String])
+    case VoidType           => ASMType.VOID_TYPE
     case ClassType(name, _) => ASMType.getObjectType(name)
-    case ArrayType(elemType) => ASMType.getType('[' + toASMType(elemType).getDescriptor)
-    case FunType(params, ret) => ASMType.getMethodType(toASMType(ret), params.map(toASMType): _*)
+    case ArrayType(elemType) =>
+      ASMType.getType('[' + toASMType(elemType).getDescriptor)
+    case FunType(params, ret) =>
+      ASMType.getMethodType(toASMType(ret), params.map(toASMType): _*)
   }
 
   /**
@@ -158,7 +207,8 @@ trait Util {
     * @param clazz the class symbol
     * @return its internal name
     */
-  def internalName(clazz: ClassSymbol): String = toASMType(clazz.typ).getInternalName
+  def internalName(clazz: ClassSymbol): String =
+    toASMType(clazz.typ).getInternalName
 
   /**
     * Get the (type) descriptor of a field symbol.
@@ -167,7 +217,8 @@ trait Util {
     * @param field the field symbol, i.e. member var/method
     * @return its descriptor
     */
-  def descriptor(field: FieldSymbol): String = toASMType(field.typ).getDescriptor
+  def descriptor(field: FieldSymbol): String =
+    toASMType(field.typ).getDescriptor
 
   // -----------------------------------------------------------------------------------------------
   // The following group of methods handle selection choice based on types. Since JVM has NO useful
@@ -187,41 +238,42 @@ trait Util {
   // you attempt to pop a long (32 bit) from the stack, given that you just pushed an int (16 bit).
   // -----------------------------------------------------------------------------------------------
 
-  def loadDefaultValue(typ: Type)(implicit mv: MethodVisitor): Unit = typ match {
-    case IntType | BoolType => mv.visitInsn(Opcodes.ICONST_0)
-    case _ => mv.visitInsn(Opcodes.ACONST_NULL)
-  }
+  def loadDefaultValue(typ: Type)(implicit mv: MethodVisitor): Unit =
+    typ match {
+      case IntType | BoolType => mv.visitInsn(Opcodes.ICONST_0)
+      case _                  => mv.visitInsn(Opcodes.ACONST_NULL)
+    }
 
   def loadOp(typ: Type): Int = typ match {
     case IntType | BoolType => Opcodes.ILOAD
-    case _ => Opcodes.ALOAD
+    case _                  => Opcodes.ALOAD
   }
 
   def storeOp(typ: Type): Int = typ match {
     case IntType | BoolType => Opcodes.ISTORE
-    case _ => Opcodes.ASTORE
+    case _                  => Opcodes.ASTORE
   }
 
   def returnOp(typ: Type): Int = typ match {
     case IntType | BoolType => Opcodes.IRETURN
-    case _ => Opcodes.ARETURN
+    case _                  => Opcodes.ARETURN
   }
 
   def arrayTypeCode(elemType: JNativeType): Int = elemType match {
-    case IntType => Opcodes.T_INT
+    case IntType  => Opcodes.T_INT
     case BoolType => Opcodes.T_BOOLEAN
   }
 
   def arrayLoadOp(elemType: Type): Int = elemType match {
-    case IntType => Opcodes.IALOAD
+    case IntType  => Opcodes.IALOAD
     case BoolType => Opcodes.BALOAD
-    case _ => Opcodes.AALOAD
+    case _        => Opcodes.AALOAD
   }
 
   def arrayStoreOp(elemType: Type): Int = elemType match {
-    case IntType => Opcodes.IASTORE
+    case IntType  => Opcodes.IASTORE
     case BoolType => Opcodes.BASTORE
-    case _ => Opcodes.AASTORE
+    case _        => Opcodes.AASTORE
   }
 
   def arithOp(op: TreeNode.ArithOp): Int = op match {
@@ -250,7 +302,9 @@ trait Util {
     * - Values are both strings: compare their actual value by invoking ???. // TODO
     * - Values are both arrays/objects: compare their address by reference instructions.
     */
-  def compare(op: TreeNode.EqOrCmpOp, typ: Type)(implicit mv: MethodVisitor): Unit = {
+  def compare(op: TreeNode.EqOrCmpOp, typ: Type)(
+      implicit mv: MethodVisitor
+  ): Unit = {
     val trueLabel = new Label
     val exitLabel = new Label
     val opCode = op match {

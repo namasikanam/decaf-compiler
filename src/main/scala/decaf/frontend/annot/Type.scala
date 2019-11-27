@@ -59,7 +59,7 @@ class BaseType extends Type {
 
   override def <=(that: Type): Boolean = that match {
     case NoType => true
-    case _ => this === that
+    case _      => this === that
   }
 }
 
@@ -103,13 +103,21 @@ object VoidType extends BaseType {
 }
 
 /**
+  * Var type. Not inferenced yet or fail to inferenced.
+  */
+object VarType extends BaseType {
+
+  override def toString: String = "var"
+}
+
+/**
   * Null type. Any {{{ null }}} literal will have this type.
   */
 object NullType extends BaseType {
 
   override def <=(that: Type): Boolean = that match {
     case NoType | NullType | _: ClassType => true
-    case _ => false
+    case _                                => false
   }
 
   override def toString: String = "null"
@@ -121,20 +129,22 @@ object NullType extends BaseType {
   * @param name   class name
   * @param parent type of super class (if any)
   */
-case class ClassType(name: String, parent: Option[ClassType] = None) extends Type {
+case class ClassType(name: String, parent: Option[ClassType] = None)
+    extends Type {
 
   override def <=(that: Type): Boolean = that match {
     case NoType => true
-    case _: ClassType => parent match {
-      case Some(base) => (this === that) || (base <= that)
-      case None => this === that
-    }
+    case _: ClassType =>
+      parent match {
+        case Some(base) => (this === that) || (base <= that)
+        case None       => this === that
+      }
     case _ => false
   }
 
   override def ===(that: Type): Boolean = that match {
     case ClassType(n, _) if name == n => true
-    case _ => false
+    case _                            => false
   }
 
   override def isClassType: Boolean = true
@@ -151,12 +161,12 @@ case class ArrayType(elemType: Type) extends Type {
 
   override def <=(that: Type): Boolean = that match {
     case NoType => true
-    case _ => this === that
+    case _      => this === that
   }
 
   override def ===(that: Type): Boolean = that match {
     case ArrayType(t) => elemType === t
-    case _ => false
+    case _            => false
   }
 
   override def toString: String = {
@@ -181,15 +191,17 @@ case class FunType(args: List[Type], ret: Type) extends Type {
 
   override def <=(that: Type): Boolean = that match {
     case NoType => true
-    case FunType(params2, ret2) => (args.length == params2.length) &&
-      (ret <= ret2) && (params2 zip args).forall { case (p2, p) => p2 <= p }
+    case FunType(params2, ret2) =>
+      (args.length == params2.length) &&
+        (ret <= ret2) && (params2 zip args).forall { case (p2, p) => p2 <= p }
     case _ => false
   }
 
   override def ===(that: Type): Boolean = that match {
-    case FunType(ts, t) => ret === t && args.length == ts.length && (args zip ts).forall {
-      case (t1, t2) => t1 === t2
-    }
+    case FunType(ts, t) =>
+      ret === t && args.length == ts.length && (args zip ts).forall {
+        case (t1, t2) => t1 === t2
+      }
     case _ => false
   }
 
@@ -197,10 +209,10 @@ case class FunType(args: List[Type], ret: Type) extends Type {
 
   override def toString: String = {
     val ps = args match {
-      case Nil => "()"
+      case Nil                        => "()"
       case (t @ FunType(_, _)) :: Nil => s"($t)"
-      case t :: Nil => t.toString
-      case ts => s"(${ ts.mkString(", ") })"
+      case t :: Nil                   => t.toString
+      case ts                         => s"(${ts.mkString(", ")})"
     }
     s"$ps => $ret"
   }

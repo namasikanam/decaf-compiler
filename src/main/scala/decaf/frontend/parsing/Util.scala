@@ -2,6 +2,8 @@ package decaf.frontend.parsing
 
 import decaf.frontend.tree.SyntaxTree.{Block, Stmt}
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import decaf.frontend.tree.{TypedTree => Typed}
+import decaf.frontend.annot._
 
 object Util {
 
@@ -12,8 +14,10 @@ object Util {
     * @param e   node
     * @return updated node
     */
-  def positioned[T <: Positional](ctx: ParserRuleContext)(e: T): T = e.setPos(
-    new Pos(ctx.getStart.getLine, ctx.getStart.getCharPositionInLine + 1))
+  def positioned[T <: Positional](ctx: ParserRuleContext)(e: T): T =
+    e.setPos(
+      new Pos(ctx.getStart.getLine, ctx.getStart.getCharPositionInLine + 1)
+    )
 
   /**
     * Obtain the starting position of a `token`.
@@ -21,7 +25,8 @@ object Util {
     * @param token token
     * @return starting position
     */
-  def getPos(token: Token): Pos = new Pos(token.getLine, token.getCharPositionInLine + 1)
+  def getPos(token: Token): Pos =
+    new Pos(token.getLine, token.getCharPositionInLine + 1)
 
   /**
     * Wrap a statement as a block.
@@ -31,6 +36,6 @@ object Util {
     */
   implicit def blocked(stmt: Stmt): Block = stmt match {
     case b: Block => b
-    case _ => Block(List(stmt)).setPos(stmt.pos)
+    case _        => Block(List(stmt)).setPos(stmt.pos)
   }
 }

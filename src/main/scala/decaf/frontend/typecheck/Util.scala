@@ -18,28 +18,59 @@ trait Util extends ErrorIssuer {
     * @param ctx     scope context
     * @return a typed type literal
     */
-  def typeTypeLit(typeLit: TypeLit)(implicit ctx: ScopeContext): Typed.TypeLit = {
+  def typeTypeLit(
+      typeLit: TypeLit
+  )(implicit ctx: ScopeContext): Typed.TypeLit = {
     val typed = typeLit match {
-      case TInt() => Typed.TInt()(IntType)
-      case TBool() => Typed.TBool()(BoolType)
+      case TInt()    => Typed.TInt()(IntType)
+      case TBool()   => Typed.TBool()(BoolType)
       case TString() => Typed.TString()(StringType)
-      case TVoid() => Typed.TVoid()(VoidType)
+      case TVoid()   => Typed.TVoid()(VoidType)
+      case TVar()    => Typed.TVar()(VarType)
 
       case TClass(id) =>
         ctx.global.find(id.name) match {
           case Some(clazz) => Typed.TClass(clazz)(clazz.typ)
-          case None => issue(new ClassNotFoundError(id.name, typeLit.pos)); Typed.TVoid()(VoidType)
+          case None =>
+            issue(new ClassNotFoundError(id.name, typeLit.pos));
+            Typed.TVoid()(VoidType)
         }
 
       case TArray(elemType) =>
         val typedElemType = typeTypeLit(elemType)
         val typ = typedElemType.typ match {
-          case NoType => NoType // avoid nested errors
+          case NoType   => NoType // avoid nested errors
           case VoidType => issue(new BadArrElementError(typeLit.pos)); NoType
-          case t => ArrayType(t)
+          case t        => ArrayType(t)
         }
         Typed.TArray(typedElemType)(typ)
     }
     typed.setPos(typeLit.pos)
+  }
+
+  /**
+    * Transform a [Type] to a [TypeLit]
+    * No type check here.
+    *
+    * @param typ a [Type]
+    * @return a [TypeLit]
+    */
+  def fromTypeToTypeLit(
+      typ: Type
+  )(implicit ctx: ScopeContext): Typed.TypeLit = {
+    typ match {
+      case IntType                     => Typed.TInt()(IntType)
+      case BoolType                    => Typed.TBool()(BoolType)
+      case StringType                  => Typed.TString()(StringType)
+      case t @ ClassType(name, parent) => Typed.TClass(ctx.global(name))(t)
+      case t @ ArrayType(elemType) =>
+        Typed.TArray(fromTypeToTypeLit(elemType))(t)
+      case VoidType => Typed.TVoid()(VoidType)
+      case VarType  => Typed.TVar()(VarType)
+      case NoType =>
+        Typed.TVar()(VarType) // I'm not sure here, it's supposed to be not going to happen
+      case t @ FunType(args, ret) =>
+        Typed.TLambda(fromTypeToTypeLit(ret), args.map(fromTypeToTypeLit))(t)
+    }
   }
 }
