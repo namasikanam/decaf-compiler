@@ -399,6 +399,14 @@ class Parser(implicit config: Config)
       val receiver = ctx.expr.accept(this)
       val id = ctx.id.accept(IdVisitor)
       val v = VarSel(None, id).setPos(id.pos)
+
+      //   printf(
+      //     "visitPath id = \"%s\", pos = (%d, %d)\n",
+      //     id.name,
+      //     id.pos.line,
+      //     id.pos.column
+      //   )
+
       v.withReceiver(receiver)
     }
 

@@ -220,6 +220,13 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Syn.Expr)(implicit ctx: ScopeContext): Expr = {
+    // printf(
+    //   "testExpr(toString = \"%s\") at (%d, %d)\n",
+    //   expr.toString,
+    //   expr.pos.line,
+    //   expr.pos.column
+    // )
+
     val err = UntypedExpr(expr)
 
     val typed = expr match {
@@ -375,10 +382,17 @@ class Typer(implicit config: Config)
               case None =>
                 issue(new FieldNotFoundError(method, t, expr.pos)); err
             }
-          case t => issue(new NotClassFieldError(method, t, expr.pos)); err
+          case t =>
+            // printf(
+            //   "Syn.Call => NotClassFieldError (pos = (%d, %d))\n",
+            //   expr.pos.line,
+            //   expr.pos.column
+            // )
+
+            issue(new NotClassFieldError(method, t, method.pos)); err
         }
 
-      // TODO: I don't know how to call a simple function here……
+      // TODO: I don't know how to call a simple function here`……
       //   case call @ Syn.Call(func, args) =>
       //     val f = typeExpr(func)
       //     val as = args.map(typeExpr)
