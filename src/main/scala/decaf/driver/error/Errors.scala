@@ -177,5 +177,5 @@ class BadLengthArgError(count: Int, pos: Pos)
 class NewAbstractError(clazz: String, pos: Pos)
     extends Error(s"cannot instantiate abstract class '$clazz'", pos)
 
-class CallUncallable(typ: Type, pos: Pos)
+class CallUncallableError(typ: Type, pos: Pos)
     extends Error(s"$typ is not a callable type", pos)

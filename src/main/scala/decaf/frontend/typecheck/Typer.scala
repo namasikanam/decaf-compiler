@@ -311,13 +311,14 @@ class Typer(implicit config: Config)
           case None => issue(new UndeclVarError(id, expr.pos)); err
         }
 
-      // Path
+      // Single Path
       case Syn.VarSel(Some(Syn.VarSel(None, id)), f)
           if ctx.global.contains(id) =>
         // special case like MyClass.foo: report error cannot access field 'foo' from 'class : MyClass'
         issue(new NotClassFieldError(f, ctx.global(id).typ, expr.pos))
         err
 
+      // Path
       case Syn.VarSel(Some(receiver), id) =>
         val r = typeExpr(receiver)
         r.typ match {
@@ -351,14 +352,19 @@ class Typer(implicit config: Config)
                 if (m.isStatic) {
                   typeCall(call, None, m)
                 } else {
-                  issue(new NotClassFieldError(method, clazz.typ, expr.pos));
+                  issue(new NotClassFieldError(method, clazz.typ, method.pos));
                   err
                 }
               case _ =>
-                issue(new NotClassMethodError(method, clazz.typ, expr.pos)); err
+                issue(new NotClassMethodError(method, clazz.typ, method.pos));
+                err
             }
           case None =>
-            issue(new FieldNotFoundError(method, clazz.typ, expr.pos)); err
+            printf(
+              "FieldNotFoundError in call1: expr = \"%s\"\n",
+              expr.toString
+            )
+            issue(new FieldNotFoundError(method, clazz.typ, method.pos)); err
         }
 
       case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
@@ -376,28 +382,29 @@ class Typer(implicit config: Config)
               case Some(sym) =>
                 sym match {
                   case m: MethodSymbol => typeCall(call, r, m)
+                  case mv: MemberVarSymbol =>
+                    issue(new CallUncallableError(mv.typ, expr.pos)); err
                   case _ =>
-                    issue(new NotClassMethodError(method, t, expr.pos)); err
+                    issue(new NotClassMethodError(method, t, method.pos)); err
                 }
               case None =>
-                issue(new FieldNotFoundError(method, t, expr.pos)); err
+                if (receiver == None) {
+                  issue(new UndeclVarError(method.toString, method.pos)); err
+                } else {
+                  issue(new FieldNotFoundError(method, t, method.pos)); err
+                }
             }
           case t =>
-            // printf(
-            //   "Syn.Call => NotClassFieldError (pos = (%d, %d))\n",
-            //   expr.pos.line,
-            //   expr.pos.column
-            // )
-
             issue(new NotClassFieldError(method, t, method.pos)); err
         }
 
-      // TODO: I don't know how to call a simple function here`……
-      //   case call @ Syn.Call(func, args) =>
-      //     val f = typeExpr(func)
-      //     val as = args.map(typeExpr)
-      //     if (!f.typ.isFuncType) issue(new CallUncallable(f.typ, expr.pos))
-      //     TypedTree.Call(f, as)(f.typ)
+      //   TODO: I don't know how to call a simple function here……
+      case call @ Syn.Call(func, args) =>
+        val f = typeExpr(func)
+        val as = args.map(typeExpr)
+        if (!f.typ.isFuncType) issue(new CallUncallableError(f.typ, expr.pos));
+        err
+        issue(new CallUncallableError(f.typ, expr.pos)); err // An incorrect return value to temporarily pass compilation
 
       case Syn.ClassTest(obj, clazz) =>
         val o = typeExpr(obj)
@@ -418,6 +425,7 @@ class Typer(implicit config: Config)
     typed.setPos(expr.pos)
   }
 
+  // TODO: Needs to be rewritten
   private def typeCall(
       call: Syn.Call,
       receiver: Option[Expr],
@@ -426,7 +434,11 @@ class Typer(implicit config: Config)
     // Cannot call this's member methods in a static method
     if (receiver.isEmpty && ctx.currentMethod.isStatic && !method.isStatic) {
       issue(
-        new RefNonStaticError(method.name, ctx.currentMethod.name, call.pos)
+        new RefNonStaticError(
+          method.name,
+          ctx.currentMethod.name,
+          call.expr.pos
+        )
       )
     }
     val args = call.exprList
