@@ -188,3 +188,6 @@ class LambdaBadArgCountError(expected: Int, actual: Int, pos: Pos)
       s"lambda expression expects $expected argument(s) but $actual given",
       pos
     )
+
+// TODO: what's exact output of this?
+class TypeIncompError(t1: Type, t2: Type) extends Error(s"I don't know what's exact output.\n")

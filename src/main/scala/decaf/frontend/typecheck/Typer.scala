@@ -307,7 +307,38 @@ class Typer(implicit config: Config)
         ctx.declare(symbol)
         ExpressionLambda(ps, e)(typ)
 
-      // BlockLambda will be considered further
+      case Syn.BlockLambda(params, block) =>
+        // open a formal scope and typecheck parameters
+        val formalScope = new FormalScope
+        formalScope.ownerMethod = ctx.currentMethod
+        val formalCtx: ScopeContext = ctx.open(formalScope) // open a scope
+        // resolve local VarDef
+        val ps = params.flatMap {
+          resolveLocalVarDef(_)(formalCtx, true)
+        }
+        // open a nested lambda scope and typecheck expresssions
+        val lambdaScope = new LambdaScope
+        formalScope.nestedScope = lambdaScope
+        val lambdaCtx = formalCtx.open(lambdaScope)
+        // resolve [[block]] and typecheck
+        val b = Block(block.stmts.map{
+            resolveStmt(_)(lambdaCtx)
+        }.map{
+            checkStmt(_)(lambdaCtx, false)._1
+        })(lambdaScope).setPos(block.pos)
+        val retTyp = b.stmts.filter(stmt => stmt match {
+            case Return(e) => true
+            case _ => false
+        }).map(stmt => stmt match {
+            case Return(Some(expr)) => expr.typ
+            case Return(None) => VoidType
+            case _ => NoType
+        }).reduceOption(typeUpperBound2).getOrElse(VoidType)
+        // Build the whold block lambda
+        val typ = FunType(ps.map(_.typeLit.typ), retTyp)
+        val symbol = new LambdaSymbol(expr, typ, formalScope, ctx.currentMethod) 
+        ctx.declare(symbol)
+        BlockLambda(ps, b)(typ)
 
       case Syn.NewArray(elemType, length) =>
         val t = typeTypeLit(elemType)

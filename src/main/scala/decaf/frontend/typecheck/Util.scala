@@ -44,6 +44,11 @@ trait Util extends ErrorIssuer {
           case t        => ArrayType(t)
         }
         Typed.TArray(typedElemType)(typ)
+      
+        case TLambda(returnType, typeList) =>
+          val ret = typeTypeLit(returnType)
+          val tl = typeList.map(typeTypeLit)
+          Typed.TLambda(ret, tl)(FunType(tl.map(t => t.typ), ret.typ))
     }
     typed.setPos(typeLit.pos)
   }
@@ -73,6 +78,26 @@ trait Util extends ErrorIssuer {
       case t @ FunType(args, ret) =>
         Typed.TLambda(fromTypeToTypeLit(ret), args.map(fromTypeToTypeLit))(t)
     }
+  }
+
+  /**
+    * Resolve a statement block.
+    *
+    * @param block statement block
+    * @param ctx   scope context
+    * @return resolved block
+    */
+  def resolveBlock(block: Block)(implicit ctx: ScopeContext): Typed.Block = {
+    val localScope = new LocalScope
+    ctx.currentScope match {
+      case s: FormalScope =>
+        s.nestedScope = localScope
+      case s: LocalScope =>
+        s.nestedScopes += localScope
+    }
+    val localCtx = ctx.open(localScope)
+    val ss = block.stmts.map { resolveStmt(_)(localCtx) }
+    Typed.Block(ss)(localScope).setPos(block.pos)
   }
 
   def resolveLocalVarDef(v: LocalVarDef)(
@@ -123,5 +148,97 @@ trait Util extends ErrorIssuer {
             )
         }
     }
+  }
+
+  def resolveStmt(stmt: Stmt)(implicit ctx: ScopeContext): Typed.Stmt = {
+    val checked = stmt match {
+      case block: Block     => resolveBlock(block)
+      case v: LocalVarDef   => resolveLocalVarDef(v).getOrElse(Typed.Skip())
+      case Assign(lhs, rhs) => Typed.Assign(lhs, rhs)
+      case ExprEval(expr)   => Typed.ExprEval(expr)
+      case Skip()           => Typed.Skip()
+      case If(cond, trueBranch, falseBranch) =>
+        val t = resolveBlock(trueBranch)
+        val f = falseBranch.map(resolveBlock)
+        Typed.If(cond, t, f)
+      case While(cond, body)             => Typed.While(cond, resolveBlock(body))
+      case For(init, cond, update, body) =>
+        // Since `init` and `update` may declare local variables, we must first open the local scope of `body`, and
+        // then resolve `init`, `update` and statements inside `body`.
+        val localScope = new LocalScope
+        ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += localScope
+        val localCtx = ctx.open(localScope)
+        val i = resolveStmt(init)(localCtx)
+        val u = resolveStmt(update)(localCtx)
+        val ss = body.stmts.map { resolveStmt(_)(localCtx) }
+        val b = Typed.Block(ss)(localScope).setPos(body.pos)
+        Typed.For(i, cond, u, b)
+      case Break()      => Typed.Break()
+      case Return(expr) => Typed.Return(expr)
+      case Print(exprs) => Typed.Print(exprs)
+    }
+    checked.setPos(stmt.pos)
+  }
+
+  def typeUpperBound(tl: List[Type]): Type = tl.reduce(typeUpperBound2)
+
+  def typeUpperBound2(_t1: Type, _t2: Type): Type = {
+      if (_t1 == NullType && _t2 == NullType) NullType
+      else {
+        var t1: Type = NoType
+        var t2: Type = NoType
+        if (t1 == NullType) {
+            t1 = _t2
+            t2 = _t1
+        }
+        else {
+            t1 = _t1
+            t2 = _t2
+        }
+        if (t2 <= t1) t1
+        else {
+            t1 match {
+                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) | NoType =>
+                    issue(new TypeIncompError(t1, t2)); NoType
+                case ClassType(_, Some(p)) => typeUpperBound2(p, t2)
+                case FunType(args1, ret1) => t2 match {
+                    case FunType(args2, ret2) if args1.length == args2.length =>
+                        FunType((args1 zip args2).map(x => typeUpperBound2(x._1, x._2)), typeLowerBound2(ret1, ret2))
+                    case _ => issue(new TypeIncompError(t1, t2)); NoType
+                }
+            }
+        }
+      }
+  }
+  
+  def typeLowerBound(tl: List[Type]): Type = tl.reduce(typeLowerBound2)
+
+  def typeLowerBound2(_t1: Type, _t2: Type): Type = {
+      if (_t1 == NullType && _t2 == NullType) NullType
+      else {
+        var t1: Type = NoType
+        var t2: Type = NoType
+        if (t1 == NullType) {
+            t1 = _t2
+            t2 = _t1
+        }
+        else {
+            t1 = _t1
+            t2 = _t2
+        }
+        if (t1 <= t2) t1
+        else {
+            t1 match {
+                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) | NoType =>
+                    issue(new TypeIncompError(t1, t2)); NoType
+                case ClassType(_, Some(p)) => typeLowerBound2(p, t2)
+                case FunType(args1, ret1) => t2 match {
+                    case FunType(args2, ret2) if args1.length == args2.length =>
+                        FunType((args1 zip args2).map(x => typeLowerBound2(x._1, x._2)), typeUpperBound2(ret1, ret2))
+                    case _ => issue(new TypeIncompError(t1, t2)); NoType
+                }
+            }
+        }
+      }
   }
 }

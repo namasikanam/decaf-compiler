@@ -188,26 +188,10 @@ class LocalScope extends Scope {
 /**
   * Lambda scope
   */
-class LambdaScope extends Scope {
-
-  type Item = LocalVarSymbol
+class LambdaScope extends LocalScope {
+  override def isLocalOrFormal: Boolean = false
 
   override def isLambda: Boolean = true
-
-  /**
-    * Directly (possibly ''cross-level'') nested local scopes of this scope.
-    *
-    * For instance,
-    * {{{
-    *   { // block 1
-    *     if (true) { // block 2
-    *     }
-    *   }
-    * }}}
-    * although block 2 is not a direct child of block 1, block 2 is still directly nested in block 1.
-    */
-  val nestedScopes: mutable.ArrayBuffer[LocalScope] =
-    new mutable.ArrayBuffer[LocalScope]
 }
 
 /**
@@ -264,8 +248,6 @@ class ScopeContext private (
         if (s.isLambda) new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
         else new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
         case s: LocalScope =>
-        new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
-        case s: LambdaScope =>
         new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
     }
   }
