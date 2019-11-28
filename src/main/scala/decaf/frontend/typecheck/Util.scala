@@ -74,4 +74,54 @@ trait Util extends ErrorIssuer {
         Typed.TLambda(fromTypeToTypeLit(ret), args.map(fromTypeToTypeLit))(t)
     }
   }
+
+  def resolveLocalVarDef(v: LocalVarDef)(
+      implicit ctx: ScopeContext,
+      isParam: Boolean = false
+  ): Option[Typed.LocalVarDef] = {
+    ctx.findConflictBefore(v.name, v.pos) match {
+      case Some(earlier) =>
+        issue(new DeclConflictError(v.name, earlier.pos, v.pos))
+        // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
+        // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
+        // expectation.
+        if (isParam) {
+          val typedTypeLit = typeTypeLit(v.typeLit)
+          Some(
+            Typed.LocalVarDef(
+              typedTypeLit,
+              v.id,
+              v.init,
+              v.assignPos
+            )(null)
+          )
+        } else {
+          None
+        }
+      case None =>
+        val typedTypeLit = typeTypeLit(v.typeLit)
+        typedTypeLit.typ match {
+          case NoType =>
+            // NOTE: to avoid flushing a large number of error messages, if we know one error is caused by another,
+            // then we shall not report both, but the earlier found one only. In this case, the error of the entire
+            // LocalVarDef is caused by the bad typeLit, and thus we don't make further type check.
+            None
+          case VoidType => issue(new BadVarTypeError(v.name, v.pos)); None
+          case t =>
+            val symbol = new LocalVarSymbol(v, t)
+            ctx.declare(symbol)
+            
+            printf("declare name = " + symbol.name + "\n")
+
+            Some(
+              Typed.LocalVarDef(
+                typedTypeLit,
+                v.id,
+                v.init,
+                v.assignPos
+              )(symbol)
+            )
+        }
+    }
+  }
 }

@@ -13,6 +13,7 @@ import decaf.frontend.tree.TypedTree._
 import decaf.frontend.tree.{SyntaxTree => Syn}
 import decaf.lowlevel.log.IndentPrinter
 import decaf.printing.PrettyScope
+import java.beans.Expression
 
 /**
   * The typer phase: type check every statement and expression. It starts right after [[Namer]].
@@ -111,11 +112,15 @@ class Typer(implicit config: Config)
             //     before pos
             // So, we must rectify the "before pos" as the position of the declared variable.
             correctBeforePos = Some(v.id.pos)
+            initializedID = Some(v.id)
             val r = typeExpr(expr)
             correctBeforePos = None // recover
+            initializedID = None
 
             val typeLit = v.typeLit match {
               case TVar() =>
+                printf(s"Auto inference: type = ${r.typ}\n")
+
                 val t = fromTypeToTypeLit(r.typ)
                 t match {
                   case TVoid() | TVar() =>
@@ -238,12 +243,12 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Syn.Expr)(implicit ctx: ScopeContext): Expr = {
-    // printf(
-    //   "testExpr(toString = \"%s\") at (%d, %d)\n",
-    //   expr.toString,
-    //   expr.pos.line,
-    //   expr.pos.column
-    // )
+    printf(
+      "testExpr(toString = \"%s\") at (%d, %d)\n",
+      expr.toString,
+      expr.pos.line,
+      expr.pos.column
+    )
 
     val err = UntypedExpr(expr)
 
@@ -283,6 +288,27 @@ class Typer(implicit config: Config)
         }
         Binary(op, l, r)(resultTypeOf(op)) // make a fair guess
 
+      case Syn.ExpressionLambda(params, expr) =>
+        // open a formal scope and typecheck parameters
+        val formalScope = new FormalScope
+        formalScope.ownerMethod = ctx.currentMethod
+        val formalCtx: ScopeContext = ctx.open(formalScope) // open a scope
+        // resolve local VarDef
+        val ps = params.flatMap {
+          resolveLocalVarDef(_)(formalCtx, true)
+        }
+        // open a nested lambda scope and typecheck expresssions
+        val lambdaScope = new LambdaScope
+        formalScope.nestedScope = lambdaScope
+        val lambdaCtx = formalCtx.open(lambdaScope)
+        val e = typeExpr(expr)(lambdaCtx) // type check the returning expression of the lambda expression
+        val typ = FunType(ps.map(_.typeLit.typ), e.typ)
+        val symbol = new LambdaSymbol(expr, typ, formalScope, ctx.currentMethod) // 
+        ctx.declare(symbol)
+        ExpressionLambda(ps, e)(typ)
+
+      // BlockLambda will be considered further
+
       case Syn.NewArray(elemType, length) =>
         val t = typeTypeLit(elemType)
         val l = typeExpr(length)
@@ -304,59 +330,6 @@ class Typer(implicit config: Config)
         if (ctx.currentMethod.isStatic)
           issue(new ThisInStaticFuncError(expr.pos))
         This()(ctx.currentClass.typ) // make a fair guess
-
-      // singlePath
-      case Syn.VarSel(None, id) =>
-        // Be careful we may be inside the initializer, if so, load the correct "before position".
-        ctx.lookupBefore(id, correctBeforePos.getOrElse(expr.pos)) match {
-          case Some(sym) =>
-            sym match {
-              case v: LocalVarSymbol => LocalVar(v)(v.typ)
-              case v: MemberVarSymbol =>
-                if (ctx.currentMethod.isStatic) // member vars cannot be accessed in a static method
-                  {
-                    issue(
-                      new RefNonStaticError(
-                        id,
-                        ctx.currentMethod.name,
-                        expr.pos
-                      )
-                    )
-                  }
-                MemberVar(This(), v)(v.typ)
-              case _ => issue(new UndeclVarError(id, expr.pos)); err
-            }
-          case None => issue(new UndeclVarError(id, expr.pos)); err
-        }
-
-      // Single Path
-      case Syn.VarSel(Some(Syn.VarSel(None, id)), f)
-          if ctx.global.contains(id) =>
-        // special case like MyClass.foo: report error cannot access field 'foo' from 'class : MyClass'
-        issue(new NotClassFieldError(f, ctx.global(id).typ, expr.pos))
-        err
-
-      // Path
-      case Syn.VarSel(Some(receiver), id) =>
-        val r = typeExpr(receiver)
-        r.typ match {
-          case NoType => err
-          case t @ ClassType(c, _) =>
-            ctx.global(c).scope.lookup(id) match {
-              case Some(sym) =>
-                sym match {
-                  case v: MemberVarSymbol =>
-                    if (!(ctx.currentClass.typ <= t)) // member vars are protected
-                      {
-                        issue(new FieldNotAccessError(id, t, expr.pos))
-                      }
-                    MemberVar(r, v)(v.typ)
-                  case _ => issue(new FieldNotFoundError(id, t, expr.pos)); err
-                }
-              case None => issue(new FieldNotFoundError(id, t, expr.pos)); err
-            }
-          case t => issue(new NotClassFieldError(id, t, expr.pos)); err
-        }
 
       // Call
       case call @ Syn.Call(Syn.VarSel(Some(Syn.VarSel(None, id)), method), _)
@@ -385,10 +358,16 @@ class Typer(implicit config: Config)
             issue(new FieldNotFoundError(method, clazz.typ, method.pos)); err
         }
 
-      case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
+      case call @ Syn.Call(Syn.VarSel(receiver, method), args)
+        if receiver != None =>
+        printf("Call((receiver, method), args)\n")
+
         val r = receiver.map(typeExpr)
         r.map(_.typ).getOrElse(ctx.currentClass.typ) match {
-          case NoType => err
+          case NoType =>
+            // printf("Here is no type!\n")
+
+            err
           case _: ArrayType
               if method.name == "length" => // Special case: array.length()
             assert(r.isDefined)
@@ -406,23 +385,39 @@ class Typer(implicit config: Config)
                     issue(new NotClassMethodError(method, t, method.pos)); err
                 }
               case None =>
-                if (receiver == None) {
-                  issue(new UndeclVarError(method.toString, method.pos)); err
-                } else {
-                  issue(new FieldNotFoundError(method, t, method.pos)); err
-                }
+                issue(new FieldNotFoundError(method, t, method.pos)); err
             }
           case t =>
             issue(new NotClassFieldError(method, t, method.pos)); err
         }
 
-      //   TODO: I don't know how to call a simple function here……
+      // TODO: I don't know how to call a simple function here……
       case call @ Syn.Call(func, args) =>
         val f = typeExpr(func)
-        val as = args.map(typeExpr)
-        if (!f.typ.isFuncType) issue(new CallUncallableError(f.typ, expr.pos));
-        err
-        issue(new CallUncallableError(f.typ, expr.pos)); err // An incorrect return value to temporarily pass compilation
+        f.typ match {
+          case NoType => err
+          case FunType(typArgs, ret) =>
+            if (typArgs.length != args.length) {
+                // TODO: consider calling member method
+                issue(new LambdaBadArgCountError(typArgs.length, args.length, expr.pos))
+            }
+            val as = (typArgs zip args).zipWithIndex.map {
+                case ((t, a), i) =>
+                val e = typeExpr(a)
+                if (e.typ.noError && !(e.typ <= t)) {
+                    issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                }
+                e
+            }
+            FunctionCall(f, as)(ret)
+          case _ =>
+            if (f.typ != NoType) {
+                // printf("At " + expr.pos + ", call an uncallable.\n")
+
+                issue(new CallUncallableError(f.typ, expr.pos))
+            }
+            err
+        }
 
       case Syn.ClassTest(obj, clazz) =>
         val o = typeExpr(obj)
@@ -490,8 +485,15 @@ class Typer(implicit config: Config)
       // Variable, which should be complicated since a legal variable could refer to a local var,
       // a visible member var (, and a class name).
       case Syn.VarSel(None, id) =>
+        // printf("VarSel(None, " + id.name + ")\n")
+
         // Be careful we may be inside the initializer, if so, load the correct "before position".
-        ctx.lookupBefore(id, correctBeforePos.getOrElse(expr.pos)) match {
+        // TODO: [[if identifier != id]]
+        ctx.lookupBefore(id, initializedID match {
+            case Some(identifier) if identifier == id =>
+                correctBeforePos.getOrElse(id.pos)
+            case _ => id.pos
+        }) match {
           case Some(sym) =>
             sym match {
               case v: LocalVarSymbol => LocalVar(v)(v.typ)
@@ -507,9 +509,15 @@ class Typer(implicit config: Config)
                     )
                   }
                 MemberVar(This(), v)(v.typ)
-              case _ => issue(new UndeclVarError(id, expr.pos)); err
+              case _ =>
+                // printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
+
+                issue(new UndeclVarError(id, expr.pos)); err
             }
-          case None => issue(new UndeclVarError(id, expr.pos)); err
+          case None =>
+            // printf("VarSel fail to find " + id.name + ".\n")
+
+            issue(new UndeclVarError(id, expr.pos)); err
         }
 
       case Syn.VarSel(Some(Syn.VarSel(None, id)), f)
@@ -546,7 +554,9 @@ class Typer(implicit config: Config)
           case ArrayType(elemType) =>
             if (i.typ !== IntType) issue(new SubNotIntError(expr.pos))
             elemType // make a fair guess
-          case _ => issue(new NotArrayError(array.pos)); NoType
+          case t =>
+            if (t.noError) issue(new NotArrayError(array.pos))
+            NoType
         }
         IndexSel(a, i)(typ)
     }
@@ -554,6 +564,7 @@ class Typer(implicit config: Config)
   }
 
   private var correctBeforePos: Option[Pos] = None
+  private var initializedID: Option[String] = None
 
   private def compatible(op: Op, operand: Type): Boolean = op match {
     case NEG => operand === IntType // if e : int, then -e : int

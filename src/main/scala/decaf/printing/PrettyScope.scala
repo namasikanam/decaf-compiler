@@ -50,8 +50,12 @@ class PrettyScope(printer: IndentPrinter)
             printer.println(symbol.toString)
           }
         }
-        if (!s.owner.isAbstract)
-          pretty(s.nestedScope)
+        s.owner match {
+          case m: MethodSymbol =>
+            if (!m.isAbstract)
+              pretty(s.nestedScope)
+          case _ => ;
+        }
       }
     case s: LocalScope =>
       printer.println(s"LOCAL SCOPE:")

@@ -1,10 +1,10 @@
 package decaf.frontend.annot
 
 import decaf.frontend.parsing.Pos
-
 import scala.collection.mutable
-
 import decaf.driver.error._
+import scala.sys
+import scala.util.Random
 
 /**
   * Scopes.
@@ -89,10 +89,13 @@ sealed trait Scope extends Annot {
   /** Is this a formal scope? */
   def isFormal: Boolean = false
 
+  /** Is this a lambda scope? */
+  def isLambda: Boolean = false
+
   override def toString: String =
-    "{ " + symbols.map {
-      case (name, symbol) => s"  $name -> $symbol"
-    } mkString "\n" + " }"
+    "{ " + (symbols.map {
+      case (name, symbol) => s"  $name --> $symbol"
+    } mkString "\n") + "\n(isFormal = " + (if (this.isFormal) "true" else "false") + ")" + " , " + "(isLambda = " + (if (this.isLambda) "true" else "false") + ") }"
 
   /**
     * Actual symbol table: maps names to their symbols.
@@ -146,12 +149,15 @@ class FormalScope extends Scope {
   /**
     * The directly nested local scope of the function body.
     */
-  val nestedScope: LocalScope = new LocalScope
+  var nestedScope: Scope = _
 
   /**
-    * Owner, a method symbol whose parameters are defined in this formal scope.
+    * Owner, a method symbol whose parameters are defined in this formal scope,
+    * which can be [[MethodSymbol]] or [[LambdaSymbol]]
     */
-  var owner: MethodSymbol = _
+  var ownerMethod: MethodSymbol = _
+
+  var owner: Symbol = _
 }
 
 /**
@@ -162,6 +168,31 @@ class LocalScope extends Scope {
   type Item = LocalVarSymbol
 
   override def isLocalOrFormal: Boolean = true
+
+  /**
+    * Directly (possibly ''cross-level'') nested local scopes of this scope.
+    *
+    * For instance,
+    * {{{
+    *   { // block 1
+    *     if (true) { // block 2
+    *     }
+    *   }
+    * }}}
+    * although block 2 is not a direct child of block 1, block 2 is still directly nested in block 1.
+    */
+  val nestedScopes: mutable.ArrayBuffer[LocalScope] =
+    new mutable.ArrayBuffer[LocalScope]
+}
+
+/**
+  * Lambda scope
+  */
+class LambdaScope extends Scope {
+
+  type Item = LocalVarSymbol
+
+  override def isLambda: Boolean = true
 
   /**
     * Directly (possibly ''cross-level'') nested local scopes of this scope.
@@ -219,17 +250,24 @@ class ScopeContext private (
     * @param scope scope
     * @return a new scope context after opening `scope`
     */
-  def open(scope: Scope): ScopeContext = scope match {
-    case s: ClassScope =>
-      s.parent match {
-        case Some(ps) =>
-          new ScopeContext(global, s :: open(ps).scopes, s, s.owner, null)
-        case None => new ScopeContext(global, s :: scopes, s, s.owner, null)
-      }
-    case s: FormalScope =>
-      new ScopeContext(global, s :: scopes, s, currentClass, s.owner)
-    case s: LocalScope =>
-      new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
+  def open(scope: Scope): ScopeContext = {
+      printf("open scope " + scope.toString + ".\n")
+
+      scope match {
+        case s: ClassScope =>
+        s.parent match {
+            case Some(ps) =>
+            new ScopeContext(global, s :: open(ps).scopes, s, s.owner, null)
+            case None => new ScopeContext(global, s :: scopes, s, s.owner, null)
+        }
+        case s: FormalScope =>
+        if (s.isLambda) new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
+        else new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
+        case s: LocalScope =>
+        new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
+        case s: LambdaScope =>
+        new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
+    }
   }
 
   /**
@@ -255,9 +293,17 @@ class ScopeContext private (
         if (!cond(s)) {
           None
         } else {
+        //   printf(s"Find '$key' in scope $s\n")
+
           s.find(key) match {
-            case Some(symbol) if p(symbol) => Some(symbol)
-            case _                         => findWhile(key, cond, p, ss)
+            case Some(symbol) if p(symbol) =>
+                // printf("Find!\n")
+
+                Some(symbol)
+            case _                         =>
+                // printf("Not found...\n")
+
+                findWhile(key, cond, p, ss)
           }
         }
     }
@@ -278,8 +324,11 @@ class ScopeContext private (
     * @param pos position
     * @return innermost found symbol before `pos` (if any)
     */
-  def lookupBefore(key: String, pos: Pos): Option[Symbol] =
-    findWhile(key, _ => true, s => !(s.domain.isLocalOrFormal && s.pos >= pos))
+  def lookupBefore(key: String, pos: Pos): Option[Symbol] = {
+    // printf(s"lookupBefore($key, $pos)\n")
+
+    findWhile(key, _ => true, s => !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos))
+  }
 
   /**
     * Find a symbol that conflicts with some already defined symbol. Rules:
@@ -296,8 +345,14 @@ class ScopeContext private (
     */
   def findConflict(key: String): Option[Symbol] = currentScope match {
     case s if s.isLocalOrFormal =>
-      findWhile(key, _.isLocalOrFormal).orElse(global.find(key))
+      findWhile(key, s => s.isLocalOrFormal || s.isLambda).orElse(global.find(key))
     case _ => lookup(key)
+  }
+
+  def findConflictBefore(key: String, pos: Pos): Option[Symbol] = currentScope match {
+      case s if s.isLocalOrFormal =>
+        findWhile(key, s => s.isLocalOrFormal || s.isLambda, s => !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos)).orElse(global.find(key))
+      case _ => lookup(key)
   }
 
   /**

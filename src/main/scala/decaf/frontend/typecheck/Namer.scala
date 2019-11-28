@@ -230,26 +230,10 @@ class Namer(implicit config: Config)
             case None => mutable.Set[String]()
           }
 
-        // printf(
-        //   "Before resolve, the abstract methods of class %s is: ",
-        //   clazz.name
-        // )
-        // for (abstractMethod <- currentAbstractMethods)
-        //   printf("%s ", abstractMethod)
-        // printf("\n")
-
         val fs = clazz.fields.flatMap(resolveField)
         if (!clazz.isAbstract && !currentAbstractMethods.isEmpty)
           issue(new AbstractOverrideError(clazz.id.name, clazz.pos))
         abstractMethods(clazz.name) = currentAbstractMethods.toSet
-
-        // printf(
-        //   "After resolve, the abstract methods of class %s is: ",
-        //   clazz.name
-        // )
-        // for (abstractMethod <- currentAbstractMethods)
-        //   printf("%s ", abstractMethod)
-        // printf("\n")
 
         resolved(clazz.name) =
           Typed.ClassDef(clazz.id, symbol.parent, fs)(symbol).setPos(clazz.pos)
@@ -342,6 +326,7 @@ class Namer(implicit config: Config)
             val rt = typeTypeLit(returnType)
             val retType = rt.typ
             val formalScope = new FormalScope
+            formalScope.nestedScope = new LocalScope
             val formalCtx: ScopeContext = ctx.open(formalScope)
 
             if (!m.isStatic)
@@ -372,11 +357,12 @@ class Namer(implicit config: Config)
     * @return resolved block
     */
   def resolveBlock(block: Block)(implicit ctx: ScopeContext): Typed.Block = {
-    val localScope = ctx.currentScope match {
-      case s: FormalScope => s.nestedScope
+    val localScope = new LocalScope
+    ctx.currentScope match {
+      case s: FormalScope =>
+        s.nestedScope = localScope
       case s: LocalScope =>
-        s.nestedScopes += new LocalScope
-        s.nestedScopes.last
+        s.nestedScopes += localScope
     }
     val localCtx = ctx.open(localScope)
     val ss = block.stmts.map { resolveStmt(_)(localCtx) }
@@ -411,52 +397,5 @@ class Namer(implicit config: Config)
       case Print(exprs) => Typed.Print(exprs)
     }
     checked.setPos(stmt.pos)
-  }
-
-  def resolveLocalVarDef(v: LocalVarDef)(
-      implicit ctx: ScopeContext,
-      isParam: Boolean = false
-  ): Option[Typed.LocalVarDef] = {
-    ctx.findConflict(v.name) match {
-      case Some(earlier) =>
-        issue(new DeclConflictError(v.name, earlier.pos, v.pos))
-        // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
-        // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
-        // expectation.
-        if (isParam) {
-          val typedTypeLit = typeTypeLit(v.typeLit)
-          Some(
-            Typed.LocalVarDef(
-              typedTypeLit,
-              v.id,
-              v.init,
-              v.assignPos
-            )(null)
-          )
-        } else {
-          None
-        }
-      case None =>
-        val typedTypeLit = typeTypeLit(v.typeLit)
-        typedTypeLit.typ match {
-          case NoType =>
-            // NOTE: to avoid flushing a large number of error messages, if we know one error is caused by another,
-            // then we shall not report both, but the earlier found one only. In this case, the error of the entire
-            // LocalVarDef is caused by the bad typeLit, and thus we don't make further type check.
-            None
-          case VoidType => issue(new BadVarTypeError(v.name, v.pos)); None
-          case t =>
-            val symbol = new LocalVarSymbol(v, t)
-            ctx.declare(symbol)
-            Some(
-              Typed.LocalVarDef(
-                typedTypeLit,
-                v.id,
-                v.init,
-                v.assignPos
-              )(symbol)
-            )
-        }
-    }
   }
 }
