@@ -255,7 +255,11 @@ class ScopeContext private (
         }
         case s: FormalScope =>
         if (s.isLambda) new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
-        else new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
+        else {
+            printf(s"open a new method: ${s.ownerMethod}\n")
+
+            new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
+        }
         case s: LocalScope =>
         new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
     }

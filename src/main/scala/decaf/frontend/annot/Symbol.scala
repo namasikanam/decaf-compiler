@@ -161,6 +161,7 @@ class MethodSymbol(
     (if (tree.modifiers.isEmpty) "" else s"${tree.modifiers} ") + s"function $name : " + typ.toString
 
   scope.owner = this
+  scope.ownerMethod = this
 
   def arity: Int = typ.args.length
 

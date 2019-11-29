@@ -46,6 +46,9 @@ class Typer(implicit config: Config)
           case v: VarDef => v
           case m @ MethodDef(mod, id, returnType, params, body) =>
             val formalCtx = ctx.open(m.symbol.scope)
+
+            printf(s"Check method $id, open symbol = ${m.symbol}, open scope = ${m.symbol.scope}, now formalCtx.currentMethod = ${formalCtx.currentMethod}\n")
+
             val (checkedBody, returnType) = checkBlock(body)(formalCtx)
             // Check if the body always returns a value, when the method is non-void
             if (!m.isAbstract && !m.symbol.returnType.isVoidType && returnType == NoType)
@@ -85,6 +88,9 @@ class Typer(implicit config: Config)
       insideLoop: Boolean = false
   ): (Block, Type) = {
     val localCtx = ctx.open(block.scope)
+
+    printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
+
     val ss = block.stmts.map { checkStmt(_)(localCtx, insideLoop) }
     // Find the last [[stmt]] who has a correct return type
     val returnTypes = ss.filter(
@@ -110,7 +116,7 @@ class Typer(implicit config: Config)
   def checkStmt(
       stmt: Stmt
   )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type) = {
-    // printf(s"At ${stmt.pos}, checkStmt $stmt\n")
+    printf(s"At ${stmt.pos}, checkStmt $stmt\n")
 
     val checked = stmt match {
       case block: Block => checkBlock(block)
@@ -214,7 +220,11 @@ class Typer(implicit config: Config)
         (Break(), NoType)
 
       case Return(expr) =>
-        val expected = ctx.currentMethod.returnType
+        printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
+        printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
+        printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
+
+        val expected = ctx.currentMethod.typ.ret
         val e = expr match {
           case Some(e1) => Some(typeExpr(e1))
           case None     => None
@@ -275,7 +285,7 @@ class Typer(implicit config: Config)
       expr.pos.column
     )
 
-    val err = UntypedExpr(expr)
+    val err = ErrorTypeExpr(expr)
 
     val typed = expr match {
       case e: LValue => typeLValue(e)
@@ -553,7 +563,7 @@ class Typer(implicit config: Config)
   private def typeLValue(
       expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
-    val err = UntypedLValue(expr)
+    val err = ErrorTypeLValue(expr)
 
     val typed = expr match {
       // Variable, which should be complicated since a legal variable could refer to a local var,

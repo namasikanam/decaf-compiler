@@ -84,7 +84,7 @@ case object NoMainClassError
 
 case class AbstractOverrideError(id: String, override val pos: Pos)
     extends Error(
-      s"'$id' is not abstract and does not val all abstract methods",
+      s"'$id' is not abstract and does not override all abstract methods",
       pos
     )
 

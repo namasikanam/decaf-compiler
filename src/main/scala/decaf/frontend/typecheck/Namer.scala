@@ -328,7 +328,7 @@ class Namer(implicit config: Config)
           case m @ MethodDef(mod, id, returnType, params, body) =>
             val rt = typeTypeLit(returnType)
             val retType = rt.typ
-            val formalScope = new FormalScope
+            var formalScope = new FormalScope
             formalScope.nestedScope = new LocalScope
             val formalCtx: ScopeContext = ctx.open(formalScope)
 
@@ -344,7 +344,6 @@ class Namer(implicit config: Config)
             val funType = FunType(typedParams.map(_.typeLit.typ), retType)
             val symbol =
               new MethodSymbol(m, funType, formalScope, ctx.currentClass)
-            formalScope.ownerMethod = symbol
             ctx.declare(symbol)
             val block = resolveBlock(body)(formalCtx)
             Some(Typed.MethodDef(mod, id, rt, typedParams, block)(symbol))
@@ -387,7 +386,7 @@ class Namer(implicit config: Config)
 
   // Build symbol in lambda expression
   def resolveExpr(expr: Expr)(implicit ctx: ScopeContext): Typed.Expr = {
-    val err = Typed.UntypedExpr(expr)
+    val err = Typed.ErrorSynExpr(expr)
 
     val resolved = expr match {
         case e: LValue => resolveLValue(e)
@@ -474,7 +473,7 @@ class Namer(implicit config: Config)
       case If(cond, trueBranch, falseBranch) =>
         val t = resolveBlock(trueBranch)
         val f = falseBranch.map(resolveBlock)
-        Typed.If(cond, t, f)
+        Typed.If(resolveExpr(cond), t, f)
       case While(cond, body)             => Typed.While(resolveExpr(cond), resolveBlock(body))
       case For(init, cond, update, body) =>
         // Since `init` and `update` may declare local variables, we must first open the local scope of `body`, and
@@ -496,5 +495,66 @@ class Namer(implicit config: Config)
       case Print(exprs) => Typed.Print(exprs.map(resolveExpr))
     }
     resolved.setPos(stmt.pos)
+  }
+
+  def resolveLocalVarDef(v: LocalVarDef)(
+      implicit ctx: ScopeContext,
+      isParam: Boolean = false
+  ): Option[Typed.LocalVarDef] = {
+    ctx.findConflictBefore(v.name, v.pos) match {
+      case Some(earlier) =>
+        printf(s"At ${v.pos}, DeclConflictError occurs when resolving LocalVarDef\n")
+
+        issue(new DeclConflictError(v.name, earlier.pos, v.pos))
+        // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
+        // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
+        // expectation.
+        if (isParam) {
+          val typedTypeLit = typeTypeLit(v.typeLit)
+          Some(
+            Typed.LocalVarDef(
+              typedTypeLit,
+              v.id,
+              v.init.map(resolveExpr),
+              v.assignPos
+            )(null)
+          )
+        } else {
+          // Remain lambda, but do not to declare
+          // Append the id with a random string for convenience
+          None
+        }
+      case None =>
+        printf(s"At ${v.pos}, here's no conflict with ${v.name}!\n")
+
+        val typedTypeLit = typeTypeLit(v.typeLit)
+        typedTypeLit.typ match {
+          case NoType =>
+            // NOTE: to avoid flushing a large number of error messages, if we know one error is caused by another,
+            // then we shall not report both, but the earlier found one only. In this case, the error of the entire
+            // LocalVarDef is caused by the bad typeLit, and thus we don't make further type check.
+            None
+          case VoidType =>
+            v.typeLit match {
+                case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
+                case _ =>
+            }
+            None
+          case t =>
+            val symbol = new LocalVarSymbol(v.name, t, v.pos)
+            ctx.declare(symbol)
+            
+            // printf("declare name = " + symbol.name + "\n")
+
+            Some(
+              Typed.LocalVarDef(
+                typedTypeLit,
+                v.id,
+                v.init.map(resolveExpr),
+                v.assignPos
+              )(symbol)
+            )
+        }
+    }
   }
 }
