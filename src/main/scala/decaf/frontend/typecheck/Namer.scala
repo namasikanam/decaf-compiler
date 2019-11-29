@@ -503,7 +503,7 @@ class Namer(implicit config: Config)
   ): Option[Typed.LocalVarDef] = {
     ctx.findConflictBefore(v.name, v.pos) match {
       case Some(earlier) =>
-        printf(s"At ${v.pos}, DeclConflictError occurs when resolving LocalVarDef\n")
+        // printf(s"At ${v.pos}, DeclConflictError occurs when resolving LocalVarDef\n")
 
         issue(new DeclConflictError(v.name, earlier.pos, v.pos))
         // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
@@ -525,7 +525,7 @@ class Namer(implicit config: Config)
           None
         }
       case None =>
-        printf(s"At ${v.pos}, here's no conflict with ${v.name}!\n")
+        // printf(s"At ${v.pos}, here's no conflict with ${v.name}!\n")
 
         val typedTypeLit = typeTypeLit(v.typeLit)
         typedTypeLit.typ match {

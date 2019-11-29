@@ -44,16 +44,20 @@ class Typer(implicit config: Config)
         val ctx = global.open(symbol.scope)
         val checkedFields = fields.map {
           case v: VarDef => v
-          case m @ MethodDef(mod, id, returnType, params, body) =>
+          case m @ MethodDef(mod, id, methodReturnTypeLit, params, body) =>
             val formalCtx = ctx.open(m.symbol.scope)
 
-            printf(s"Check method $id, open symbol = ${m.symbol}, open scope = ${m.symbol.scope}, now formalCtx.currentMethod = ${formalCtx.currentMethod}\n")
+            // printf(s"Check method $m\n")
 
-            val (checkedBody, returnType) = checkBlock(body)(formalCtx)
+            val (checkedBody, blockReturnType) = checkBlock(body)(formalCtx)
+
+            // printf(s"After check the block of the method, blockReturnType = $blockReturnType\n")
+
             // Check if the body always returns a value, when the method is non-void
-            if (!m.isAbstract && !m.symbol.returnType.isVoidType && returnType == NoType)
+            if (!m.isAbstract && !methodReturnTypeLit.typ.isVoidType && (!blockReturnType.noError || blockReturnType.isVoidType))
               issue(new MissingReturnError(checkedBody.pos))
-            MethodDef(mod, id, fromTypeToTypeLit(returnType)(ctx), params, checkedBody)(m.symbol)
+
+            MethodDef(mod, id, methodReturnTypeLit, params, checkedBody)(m.symbol)
               .setPos(m.pos)
         }
         ClassDef(id, parent, checkedFields)(symbol).setPos(clazz.pos)
@@ -220,9 +224,9 @@ class Typer(implicit config: Config)
         (Break(), NoType)
 
       case Return(expr) =>
-        printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
-        printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
-        printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
+        // printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
+        // printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
+        // printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
 
         val expected = ctx.currentMethod.typ.ret
         val e = expr match {
@@ -278,12 +282,7 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
-    printf(
-      "testExpr(toString = \"%s\") at (%d, %d)\n",
-      expr.toString,
-      expr.pos.line,
-      expr.pos.column
-    )
+    printf(s"At testExpr(expr = $expr) at ${expr.pos}\n")
 
     val err = ErrorTypeExpr(expr)
 
@@ -630,8 +629,9 @@ class Typer(implicit config: Config)
                   issue(new NotClassFieldError(f, clazz.typ, f.pos));
                   err
                 }
-              case _ =>
-                issue(new NotClassMethodError(f, clazz.typ, f.pos));
+              case _ => // Here's strange for me, but I have no choice.
+                issue(new NotClassFieldError(f, clazz.typ, f.pos))
+                // issue(new NotClassMethodError(f, clazz.typ, f.pos));
                 err
             }
           case None =>
