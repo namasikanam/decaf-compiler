@@ -25,6 +25,7 @@ trait TreeTmpl {
   type ClassAnnot <: Annot
   type MemberVarAnnot <: Annot
   type MethodAnnot <: Annot
+  type LambdaAnnot <: Annot
   type TypeLitAnnot <: Annot
   type LocalVarAnnot <: Annot
   type StmtAnnot <: Annot

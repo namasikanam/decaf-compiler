@@ -31,6 +31,7 @@ object SyntaxTree extends TreeTmpl {
   type MemberVarAnnot = No
   type LocalVarAnnot = No
   type MethodAnnot = No
+  type LambdaAnnot = No
   type TypeLitAnnot = No
   type StmtAnnot = No
   type BlockAnnot = No

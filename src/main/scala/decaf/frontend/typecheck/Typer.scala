@@ -93,7 +93,7 @@ class Typer(implicit config: Config)
   ): (Block, Type) = {
     val localCtx = ctx.open(block.scope)
 
-    printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
+    // printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
 
     val ss = block.stmts.map { checkStmt(_)(localCtx, insideLoop) }
     // Find the last [[stmt]] who has a correct return type
@@ -120,7 +120,7 @@ class Typer(implicit config: Config)
   def checkStmt(
       stmt: Stmt
   )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type) = {
-    printf(s"At ${stmt.pos}, checkStmt $stmt\n")
+    // printf(s"At ${stmt.pos}, checkStmt $stmt\n")
 
     val checked = stmt match {
       case block: Block => checkBlock(block)
@@ -282,7 +282,7 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
-    printf(s"At testExpr(expr = $expr) at ${expr.pos}\n")
+    // printf(s"At testExpr(expr = $expr) at ${expr.pos}\n")
 
     val err = ErrorTypeExpr(expr)
 
@@ -327,14 +327,16 @@ class Typer(implicit config: Config)
         val lctx = fctx.open(scope.nestedScope)
         val re = typeExpr(retExpr)(lctx)
         val typ = FunType(params.map(_.typeLit.typ), re.typ)
-        ExpressionLambda(params, re)(typ)
+        scope.owner.asInstanceOf[LambdaSymbol].typ = typ
+        ExpressionLambda(params, re, scope)(typ)
 
       case BlockLambda(params, block, scope) =>
         val fctx = ctx.open(scope)
         val lctx = fctx.open(scope.nestedScope)
         val (b, retTyp) = checkBlock(block)(lctx)
         val typ = FunType(params.map(_.typeLit.typ), retTyp)
-        BlockLambda(params, b)(typ)
+        scope.owner.asInstanceOf[LambdaSymbol].typ = typ
+        BlockLambda(params, b, scope)(typ)
 
       case UnTypedNewArray(elemType, length) =>
         val l = typeExpr(length)
@@ -606,12 +608,12 @@ class Typer(implicit config: Config)
                 }
                 MemberMethod(This(), m)(m.typ)
               case _ =>
-                printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
+                // printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
 
                 issue(new UndeclVarError(id, expr.pos)); err
             }
           case None =>
-            printf("VarSel fail to find " + id.name + ".\n")
+            // printf("VarSel fail to find " + id.name + ".\n")
 
             issue(new UndeclVarError(id, expr.pos)); err
         }

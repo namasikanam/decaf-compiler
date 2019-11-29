@@ -217,7 +217,7 @@ object LocalVarSymbol {
   * @param _pos
   */
 class LambdaSymbol(
-    val typ: FunType,
+    var typ: FunType,
     val scope: FormalScope,
     val _pos: Pos
 ) extends Symbol{
