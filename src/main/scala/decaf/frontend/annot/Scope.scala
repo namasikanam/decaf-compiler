@@ -238,7 +238,7 @@ class ScopeContext private (
     * @return a new scope context after opening `scope`
     */
   def open(scope: Scope): ScopeContext = {
-      printf("open scope " + scope.toString + ".\n")
+    //   printf("open scope " + scope.toString + ".\n")
 
       scope match {
         case s: ClassScope =>
@@ -278,7 +278,7 @@ class ScopeContext private (
         if (!cond(s)) {
           None
         } else {
-          printf(s"Find '$key' in scope $s\n")
+        //   printf(s"Find '$key' in scope $s\n")
 
           s.find(key) match {
             case Some(symbol) if p(symbol) =>

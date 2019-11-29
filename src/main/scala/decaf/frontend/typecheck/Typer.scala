@@ -100,7 +100,7 @@ class Typer(implicit config: Config)
   def checkStmt(
       stmt: Stmt
   )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Boolean) = {
-    printf(s"checkStmt $stmt\n")
+    // printf(s"checkStmt $stmt\n")
 
     val checked = stmt match {
       case block: Block => checkBlock(block)
@@ -121,7 +121,7 @@ class Typer(implicit config: Config)
 
             val typeLit = v.typeLit match {
               case TVar() =>
-                printf(s"Auto inference: type = ${r.typ}\n")
+                // printf(s"Auto inference: type = ${r.typ}\n")
 
                 val t = fromTypeToTypeLit(r.typ)
                 t match {
@@ -245,12 +245,12 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Syn.Expr)(implicit ctx: ScopeContext): Expr = {
-    printf(
-      "testExpr(toString = \"%s\") at (%d, %d)\n",
-      expr.toString,
-      expr.pos.line,
-      expr.pos.column
-    )
+    // printf(
+    //   "testExpr(toString = \"%s\") at (%d, %d)\n",
+    //   expr.toString,
+    //   expr.pos.line,
+    //   expr.pos.column
+    // )
 
     val err = UntypedExpr(expr)
 
@@ -392,7 +392,7 @@ class Typer(implicit config: Config)
         }
 
       case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
-        printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
+        // printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
 
         val r = receiver.map(typeExpr)
         r.map(_.typ) match {
@@ -452,7 +452,7 @@ class Typer(implicit config: Config)
                                 err
                         }
                     case m: MethodSymbol =>
-                        printf("Yes, None receiver, MethodSymbol~\n");
+                        // printf("Yes, None receiver, MethodSymbol~\n");
 
                         if (ctx.currentMethod.isStatic && !m.isStatic) {
                             issue(
@@ -479,9 +479,9 @@ class Typer(implicit config: Config)
                             MemberCall(This(), m, as)(ret)
                         }
                     case _ =>
-                        issue(new UndeclVarError(method, expr.pos)); err
+                        issue(new UndeclVarError(method, method.pos)); err
                 }
-                case None => issue(new UndeclVarError(method, expr.pos)); err
+                case None => issue(new UndeclVarError(method, method.pos)); err
             }
           case Some(t) =>
             issue(new NotClassFieldError(method, t, method.pos)); err
