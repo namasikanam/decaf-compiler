@@ -150,10 +150,13 @@ class Typer(implicit config: Config)
       case Assign(lhs, rhs) =>
         val l = typeLValue(lhs)
         val r = typeExpr(rhs)
+        l match {
+            case m: MemberMethod => issue(new AssignMethodError(m.variable.name, stmt.pos))
+            case m: StaticMethod => issue(new AssignMethodError(m.variable.name, stmt.pos))
+            case _ =>
+        }
         l.typ match {
           case NoType => // do nothing
-          case _: FunType =>
-            issue(new IncompatBinOpError("=", l.typ, r.typ, stmt.pos))
           case t if !(r.typ <= t) =>
             issue(new IncompatBinOpError("=", l.typ, r.typ, stmt.pos))
           case _ => // do nothing
@@ -245,12 +248,12 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Syn.Expr)(implicit ctx: ScopeContext): Expr = {
-    // printf(
-    //   "testExpr(toString = \"%s\") at (%d, %d)\n",
-    //   expr.toString,
-    //   expr.pos.line,
-    //   expr.pos.column
-    // )
+    printf(
+      "testExpr(toString = \"%s\") at (%d, %d)\n",
+      expr.toString,
+      expr.pos.line,
+      expr.pos.column
+    )
 
     val err = UntypedExpr(expr)
 
@@ -392,7 +395,7 @@ class Typer(implicit config: Config)
         }
 
       case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
-        // printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
+        printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
 
         val r = receiver.map(typeExpr)
         r.map(_.typ) match {
@@ -599,6 +602,18 @@ class Typer(implicit config: Config)
                     )
                   }
                 MemberVar(This(), v)(v.typ)
+              case m: MethodSymbol =>
+                if (ctx.currentMethod.isStatic && !m.isStatic) // member vars cannot be accessed in a static method
+                {
+                    issue(
+                        new RefNonStaticError(
+                        id,
+                        ctx.currentMethod.name,
+                        expr.pos
+                        )
+                    )
+                }
+                MemberMethod(This(), m)(m.typ)
               case _ =>
                 // printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
 
@@ -613,8 +628,23 @@ class Typer(implicit config: Config)
       case Syn.VarSel(Some(Syn.VarSel(None, id)), f)
           if ctx.global.contains(id) =>
         // special case like MyClass.foo: report error cannot access field 'foo' from 'class : MyClass'
-        issue(new NotClassFieldError(f, ctx.global(id).typ, expr.pos))
-        err
+        val clazz = ctx.global(id)
+        clazz.scope.lookup(f) match {
+          case Some(symbol) =>
+            symbol match {
+              case m: MethodSymbol =>
+                if (m.isStatic) StaticMethod(clazz, m)(m.typ)
+                else {
+                  issue(new NotClassFieldError(f, clazz.typ, f.pos));
+                  err
+                }
+              case _ =>
+                issue(new NotClassMethodError(f, clazz.typ, f.pos));
+                err
+            }
+          case None =>
+            issue(new FieldNotFoundError(f, clazz.typ, f.pos)); err
+        }
 
       case Syn.VarSel(Some(receiver), id) =>
         val r = typeExpr(receiver)
@@ -630,6 +660,10 @@ class Typer(implicit config: Config)
                         issue(new FieldNotAccessError(id, t, expr.pos))
                       }
                     MemberVar(r, v)(v.typ)
+                  case m: MethodSymbol =>
+                    if (m.isStatic) { // TODO: Some unkown issue should occur here
+                    }
+                    MemberMethod(r, m)(m.typ)
                   case _ => issue(new FieldNotFoundError(id, t, expr.pos)); err
                 }
               case None => issue(new FieldNotFoundError(id, t, expr.pos)); err

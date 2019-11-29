@@ -39,6 +39,14 @@ object TypedTree extends TreeTmpl {
       implicit val annot: ExprAnnot
   ) extends LValue
 
+  case class MemberMethod(receiver: Expr, variable: MethodSymbol)(
+      implicit val annot: ExprAnnot
+  ) extends LValue
+
+  case class StaticMethod(owner: ClassSymbol, variable: MethodSymbol)(
+      implicit val annot: ExprAnnot
+  ) extends LValue
+
   /**
     * Calling a static method. Derives from [[SyntaxTree.Call]].
     *

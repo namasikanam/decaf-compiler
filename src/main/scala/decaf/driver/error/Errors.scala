@@ -193,3 +193,5 @@ class LambdaBadArgCountError(expected: Int, actual: Int, pos: Pos)
 class TypeIncompError(t1: Type, t2: Type) extends Error(s"I don't know what's exact output.\n")
 
 class VoidArgError(pos: Pos) extends Error(s"arguments in function type must be non-void known type", pos)
+
+class AssignMethodError(name: String, pos: Pos) extends Error(s"cannot assign value to class member method '$name'", pos)
