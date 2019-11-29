@@ -153,6 +153,13 @@ class Typer(implicit config: Config)
         l match {
             case m: MemberMethod => issue(new AssignMethodError(m.variable.name, stmt.pos))
             case m: StaticMethod => issue(new AssignMethodError(m.variable.name, stmt.pos))
+            case v: LocalVar =>
+                // if (ctx.currentScope.isLambda && v.variable.domain.isLocal && v.variable.domain != ctx.currentScope)
+
+                // printf(s"Assign a local var:\n domain = ${v.variable.domain},\n scopes = ${ctx.scopes.mkString("\n")}\nEndAssign\n")
+
+                if (ctx.currentScope.isLambda && v.variable.domain.isLocal && !checkSameLocal(v.variable.domain, ctx.scopes))
+                    issue(new AssCapturedError(stmt.pos))
             case _ =>
         }
         l.typ match {
@@ -203,7 +210,7 @@ class Typer(implicit config: Config)
           case None     => None
         }
         val actual = e.map(_.typ).getOrElse(VoidType)
-        if (actual.noError && !(actual <= expected))
+        if (actual.noError && !ctx.currentScope.isLambda && !(actual <= expected))
           issue(new BadReturnTypeError(expected, actual, stmt.pos))
         (Return(e), e.isDefined)
 
@@ -331,14 +338,20 @@ class Typer(implicit config: Config)
         }.map{
             checkStmt(_)(lambdaCtx, false)._1
         })(lambdaScope).setPos(block.pos)
-        val retTyp = b.stmts.filter(stmt => stmt match {
+        val retTyps = b.stmts.filter(stmt => stmt match {
             case Return(e) => true
             case _ => false
         }).map(stmt => stmt match {
             case Return(Some(expr)) => expr.typ
             case Return(None) => VoidType
             case _ => NoType
-        }).reduceOption(typeUpperBound2).getOrElse(VoidType)
+        })
+
+        printf(s"There ${retTyps.length} return stmts\n")
+
+        val retTyp = if (retTyps.length == 0) VoidType
+        else if (retTyps.length == 1) retTyps.head
+        else retTyps.reduce(typeUpperBound2)
         // Build the whold block lambda
         val typ = FunType(ps.map(_.typeLit.typ), retTyp)
         val symbol = new LambdaSymbol(typ, formalScope, eb.pos) 
@@ -589,7 +602,8 @@ class Typer(implicit config: Config)
         }) match {
           case Some(sym) =>
             sym match {
-              case v: LocalVarSymbol => LocalVar(v)(v.typ)
+              case v: LocalVarSymbol =>
+                LocalVar(v)(v.typ)
               case v: MemberVarSymbol =>
                 if (ctx.currentMethod.isStatic) // member vars cannot be accessed in a static method
                   {

@@ -100,6 +100,8 @@ trait Util extends ErrorIssuer {
     ctx.currentScope match {
       case s: FormalScope =>
         s.nestedScope = localScope
+      case s: LambdaScope =>
+        localScope.lambdaFlag = true
       case s: LocalScope =>
         s.nestedScopes += localScope
     }
@@ -253,5 +255,16 @@ trait Util extends ErrorIssuer {
             }
         }
       }
+  }
+
+  def checkSameLocal(domain: Scope, scopes: List[Scope]): Boolean = {
+    if (scopes.head.isFormal) false
+    else {
+        if (domain == scopes.head) true
+        else {
+            // printf(s"Not equal:\n domain = ${domain}, scopes.last = ${scopes.last}\n")
+            checkSameLocal(domain, scopes.tail)
+        }
+    }
   }
 }

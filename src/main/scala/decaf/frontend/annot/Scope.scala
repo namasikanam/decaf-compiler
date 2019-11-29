@@ -89,13 +89,16 @@ sealed trait Scope extends Annot {
   /** Is this a formal scope? */
   def isFormal: Boolean = false
 
+  /** Is this a local scope? */
+  def isLocal: Boolean = false
+
   /** Is this a lambda scope? */
   def isLambda: Boolean = false
 
   override def toString: String =
     "{ " + (symbols.map {
       case (name, symbol) => s"  $name --> $symbol"
-    } mkString "\n") + "\n(isFormal = " + (if (this.isFormal) "true" else "false") + ")" + " , " + "(isLambda = " + (if (this.isLambda) "true" else "false") + ") }"
+    } mkString "\n") + "\n(isFormal = " + (if (this.isFormal) "true" else "false") + ")" + " , " + "(isLambda = " + (if (this.isLambda) "true" else "false") + ") , " + "(isLocal = " + (if (this.isLocal) "true" else "false") + ") }"
 
   /**
     * Actual symbol table: maps names to their symbols.
@@ -172,6 +175,11 @@ class LocalScope extends Scope {
 
   override def isLocalOrFormal: Boolean = true
 
+  override def isLocal: Boolean = true
+
+  var lambdaFlag = false
+  override def isLambda: Boolean = lambdaFlag
+
   /**
     * Directly (possibly ''cross-level'') nested local scopes of this scope.
     *
@@ -192,9 +200,7 @@ class LocalScope extends Scope {
   * Lambda scope
   */
 class LambdaScope extends LocalScope {
-  override def isLocalOrFormal: Boolean = false
-
-  override def isLambda: Boolean = true
+  lambdaFlag = true
 }
 
 /**
@@ -222,7 +228,7 @@ class LambdaScope extends LocalScope {
   */
 class ScopeContext private (
     val global: GlobalScope,
-    private val scopes: List[Scope],
+    val scopes: List[Scope],
     val currentScope: Scope,
     val currentClass: ClassSymbol,
     val currentMethod: MethodSymbol

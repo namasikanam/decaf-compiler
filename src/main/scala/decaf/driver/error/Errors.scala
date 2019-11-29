@@ -195,3 +195,5 @@ class TypeIncompError(t1: Type, t2: Type) extends Error(s"I don't know what's ex
 class VoidArgError(pos: Pos) extends Error(s"arguments in function type must be non-void known type", pos)
 
 class AssignMethodError(name: String, pos: Pos) extends Error(s"cannot assign value to class member method '$name'", pos)
+
+class AssCapturedError(pos: Pos) extends Error(s"cannot assign value to captured variables in lambda expression", pos)
