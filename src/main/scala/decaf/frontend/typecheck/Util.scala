@@ -102,6 +102,7 @@ trait Util extends ErrorIssuer {
         s.nestedScope = localScope
       case s: LambdaScope =>
         localScope.lambdaFlag = true
+        s.nestedScopes += localScope
       case s: LocalScope =>
         s.nestedScopes += localScope
     }
