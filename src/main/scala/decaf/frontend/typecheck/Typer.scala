@@ -157,7 +157,7 @@ class Typer(implicit config: Config)
                 new IncompatBinOpError("=", typeLit.typ, r.typ, v.assignPos)
               )
             } else
-              ctx.declare(new LocalVarSymbol(v, r.typ))
+              ctx.declare(new LocalVarSymbol(v, typeLit.typ))
             (LocalVarDef(typeLit, v.id, Some(r))(v.symbol), NoType)
           case None =>
             v.typeLit match {
