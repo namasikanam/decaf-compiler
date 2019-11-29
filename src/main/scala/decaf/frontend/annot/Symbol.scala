@@ -179,36 +179,6 @@ class MethodSymbol(
 }
 
 /**
-  * Lambda symbol, representing a lambda definition.
-  *
-  * @param tree a [[decaf.frontend.tree.SyntaxTree.Expr]]
-  * @param typ type
-  * @param scope associated formal scope of the lambda parameters
-  */
-class LambdaSymbol(
-    tree: SyntaxTree.Expr,
-    val typ: FunType,
-    val scope: FormalScope,
-    val owner: Symbol
-) extends Symbol {
-
-  type Typ = FunType
-
-  override def name: String = "lambda#" + tree.pos.toString
-
-  override def pos: Pos = tree.pos
-
-  override def str: String =
-    s"function lambda@" + tree.pos.toString + " : " + typ.toString
-
-  scope.owner = this
-
-  def arity: Int = typ.args.length
-
-  def returnType: Type = typ.ret
-}
-
-/**
   * Local variable symbol, representing a local variable definition.
   *
   * @param name name
@@ -236,6 +206,35 @@ object LocalVarSymbol {
   /** Create a special "this" symbol its type and position. */
   def thisVar(typ: Type, pos: Pos): LocalVarSymbol =
     new LocalVarSymbol("this", typ, pos)
+}
+
+/**
+  * Lambda symbol, representing a lambda definition.
+  *
+  * @param typ
+  * @param scope 
+  * @param _pos
+  */
+class LambdaSymbol(
+    val typ: FunType,
+    val scope: FormalScope,
+    val _pos: Pos
+) extends Symbol{
+
+  type Typ = FunType
+
+  override def name: String = s"lambda@$pos"
+
+  override def pos: Pos = _pos
+
+  override def str: String =
+    s"function lambda@" + pos.toString + " : " + typ.toString
+
+  scope.owner = this
+
+  def arity: Int = typ.args.length
+
+  def returnType: Type = typ.ret
 }
 
 object SymbolImplicit {

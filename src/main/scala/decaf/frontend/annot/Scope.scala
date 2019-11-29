@@ -126,8 +126,11 @@ class ClassScope(val parent: Option[ClassScope] = None) extends Scope {
     * @param key symbol's name
     * @return innermost found symbol (if any)
     */
-  def lookup(key: String): Option[FieldSymbol] =
+  def lookup(key: String): Option[FieldSymbol] = {
+    printf(s"lookup $key in $this\n")
+
     find(key).orElse(parent.flatMap(_.lookup(key)))
+  }
 
   /**
     * Owner, a class symbol whose members are defined in this class scope.
@@ -165,7 +168,7 @@ class FormalScope extends Scope {
   */
 class LocalScope extends Scope {
 
-  type Item = LocalVarSymbol
+  type Item = Symbol
 
   override def isLocalOrFormal: Boolean = true
 
@@ -275,7 +278,7 @@ class ScopeContext private (
         if (!cond(s)) {
           None
         } else {
-        //   printf(s"Find '$key' in scope $s\n")
+          printf(s"Find '$key' in scope $s\n")
 
           s.find(key) match {
             case Some(symbol) if p(symbol) =>

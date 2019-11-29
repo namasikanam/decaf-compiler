@@ -54,10 +54,11 @@ class PrettyScope(printer: IndentPrinter)
           case m: MethodSymbol =>
             if (!m.isAbstract)
               pretty(s.nestedScope)
+          case l: LambdaSymbol => pretty(s.nestedScope)
           case _ => ;
         }
       }
-    case s: LocalScope =>
+    case s: LambdaScope =>
       printer.println(s"LOCAL SCOPE:")
       indent {
         if (s.isEmpty) {
@@ -66,6 +67,30 @@ class PrettyScope(printer: IndentPrinter)
           s.values.foreach { symbol =>
             printer.println(symbol.toString)
           }
+
+          // TODO: The order perhaps not right
+          s.values.foreach{symbol => symbol match {
+            case sym: LambdaSymbol => pretty(sym.scope)
+            case _ =>
+          }}
+        }
+        s.nestedScopes.foreach(pretty)
+      }
+    case s: LocalScope =>
+      printer.println(s"LOCAL SCOPE:")
+      indent {
+        if (s.isEmpty) {
+          printer.println("<empty>")
+        } else {
+        //   printf(s"${s.values}\n")
+
+          s.values.foreach{symbol => printer.println(symbol.toString)}
+
+          // TODO: The order is perhaps not right
+          s.values.foreach{symbol => symbol match {
+            case sym: LambdaSymbol => pretty(sym.scope)
+            case _ =>
+          }}
         }
         s.nestedScopes.foreach(pretty)
       }

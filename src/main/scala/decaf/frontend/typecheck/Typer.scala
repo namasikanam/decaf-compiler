@@ -100,6 +100,8 @@ class Typer(implicit config: Config)
   def checkStmt(
       stmt: Stmt
   )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Boolean) = {
+    printf(s"checkStmt $stmt\n")
+
     val checked = stmt match {
       case block: Block => checkBlock(block)
 
@@ -288,7 +290,7 @@ class Typer(implicit config: Config)
         }
         Binary(op, l, r)(resultTypeOf(op)) // make a fair guess
 
-      case Syn.ExpressionLambda(params, expr) =>
+      case el @ Syn.ExpressionLambda(params, expr) =>
         // open a formal scope and typecheck parameters
         val formalScope = new FormalScope
         formalScope.ownerMethod = ctx.currentMethod
@@ -303,11 +305,11 @@ class Typer(implicit config: Config)
         val lambdaCtx = formalCtx.open(lambdaScope)
         val e = typeExpr(expr)(lambdaCtx) // type check the returning expression of the lambda expression
         val typ = FunType(ps.map(_.typeLit.typ), e.typ)
-        val symbol = new LambdaSymbol(expr, typ, formalScope, ctx.currentMethod) // 
+        val symbol = new LambdaSymbol(typ, formalScope, el.pos) // 
         ctx.declare(symbol)
         ExpressionLambda(ps, e)(typ)
 
-      case Syn.BlockLambda(params, block) =>
+      case eb @ Syn.BlockLambda(params, block) =>
         // open a formal scope and typecheck parameters
         val formalScope = new FormalScope
         formalScope.ownerMethod = ctx.currentMethod
@@ -336,7 +338,7 @@ class Typer(implicit config: Config)
         }).reduceOption(typeUpperBound2).getOrElse(VoidType)
         // Build the whold block lambda
         val typ = FunType(ps.map(_.typeLit.typ), retTyp)
-        val symbol = new LambdaSymbol(expr, typ, formalScope, ctx.currentMethod) 
+        val symbol = new LambdaSymbol(typ, formalScope, eb.pos) 
         ctx.declare(symbol)
         BlockLambda(ps, b)(typ)
 
@@ -389,23 +391,22 @@ class Typer(implicit config: Config)
             issue(new FieldNotFoundError(method, clazz.typ, method.pos)); err
         }
 
-      case call @ Syn.Call(Syn.VarSel(receiver, method), args)
-        if receiver != None =>
-        printf("Call((receiver, method), args)\n")
+      case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
+        printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
 
         val r = receiver.map(typeExpr)
-        r.map(_.typ).getOrElse(ctx.currentClass.typ) match {
-          case NoType =>
+        r.map(_.typ) match {
+          case Some(NoType) =>
             // printf("Here is no type!\n")
 
             err
-          case _: ArrayType
+          case Some(_: ArrayType)
               if method.name == "length" => // Special case: array.length()
             assert(r.isDefined)
             if (args.nonEmpty)
               issue(new BadLengthArgError(args.length, expr.pos))
             ArrayLen(r.get)(IntType)
-          case t @ ClassType(c, _) =>
+          case Some(t @ ClassType(c, _)) =>
             ctx.global(c).scope.lookup(method) match {
               case Some(sym) =>
                 sym match {
@@ -416,9 +417,73 @@ class Typer(implicit config: Config)
                     issue(new NotClassMethodError(method, t, method.pos)); err
                 }
               case None =>
-                issue(new FieldNotFoundError(method, t, method.pos)); err
+                if (receiver == None) {
+                    issue(new UndeclVarError(method.name, method.pos)); err
+                }
+                else {
+                    issue(new FieldNotFoundError(method.name, t, method.pos)); err
+                }
             }
-          case t =>
+          case None =>
+            ctx.lookupBefore(method, initializedID match {
+                case Some(identifier) if identifier == method =>
+                    correctBeforePos.getOrElse(method.pos)
+                case _ => method.pos
+            }) match {
+                case Some(sym) => sym match {
+                    case v: LocalVarSymbol =>
+                        v.typ match {
+                            case FunType(typArgs, ret) =>
+                                if (typArgs.length != args.length) {
+                                    issue(new BadArgCountError(v.name, typArgs.length, args.length, expr.pos))
+                                }
+                                val as = (typArgs zip args).zipWithIndex.map {
+                                    case ((t, a), i) =>
+                                    val e = typeExpr(a)
+                                    if (e.typ.noError && !(e.typ <= t)) {
+                                        issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                                    }
+                                    e
+                                }
+                                FunctionCall(LocalVar(v)(v.typ), as)(ret)
+                            case NoType => err
+                            case _ =>
+                                issue(new CallUncallableError(v.typ, expr.pos))
+                                err
+                        }
+                    case m: MethodSymbol =>
+                        printf("Yes, None receiver, MethodSymbol~\n");
+
+                        if (ctx.currentMethod.isStatic && !m.isStatic) {
+                            issue(
+                                new RefNonStaticError(
+                                    m.name,
+                                    ctx.currentMethod.name,
+                                    call.expr.pos
+                                )
+                            )
+                        }
+                        m.typ match {
+                            case FunType(typArgs, ret) =>
+                            if (typArgs.length != args.length) {
+                                issue(new BadArgCountError(m.name, typArgs.length, args.length, expr.pos))
+                            }
+                            val as = (typArgs zip args).zipWithIndex.map {
+                                case ((t, a), i) =>
+                                val e = typeExpr(a)
+                                if (e.typ.noError && !(e.typ <= t)) {
+                                    issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                                }
+                                e
+                            }
+                            MemberCall(This(), m, as)(ret)
+                        }
+                    case _ =>
+                        issue(new UndeclVarError(method, expr.pos)); err
+                }
+                case None => issue(new UndeclVarError(method, expr.pos)); err
+            }
+          case Some(t) =>
             issue(new NotClassFieldError(method, t, method.pos)); err
         }
 
@@ -429,7 +494,6 @@ class Typer(implicit config: Config)
           case NoType => err
           case FunType(typArgs, ret) =>
             if (typArgs.length != args.length) {
-                // TODO: consider calling member method
                 issue(new LambdaBadArgCountError(typArgs.length, args.length, expr.pos))
             }
             val as = (typArgs zip args).zipWithIndex.map {
@@ -442,11 +506,7 @@ class Typer(implicit config: Config)
             }
             FunctionCall(f, as)(ret)
           case _ =>
-            if (f.typ != NoType) {
-                // printf("At " + expr.pos + ", call an uncallable.\n")
-
-                issue(new CallUncallableError(f.typ, expr.pos))
-            }
+            issue(new CallUncallableError(f.typ, expr.pos))
             err
         }
 
@@ -469,7 +529,6 @@ class Typer(implicit config: Config)
     typed.setPos(expr.pos)
   }
 
-  // TODO: Needs to be rewritten
   private def typeCall(
       call: Syn.Call,
       receiver: Option[Expr],

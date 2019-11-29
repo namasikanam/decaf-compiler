@@ -341,6 +341,7 @@ class Namer(implicit config: Config)
             val funType = FunType(typedParams.map(_.typeLit.typ), retType)
             val symbol =
               new MethodSymbol(m, funType, formalScope, ctx.currentClass)
+            formalScope.ownerMethod = symbol
             ctx.declare(symbol)
             val block = resolveBlock(body)(formalCtx)
             Some(Typed.MethodDef(mod, id, rt, typedParams, block)(symbol))

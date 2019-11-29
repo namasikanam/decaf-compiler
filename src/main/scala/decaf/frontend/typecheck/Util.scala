@@ -133,10 +133,10 @@ trait Util extends ErrorIssuer {
             None
           case VoidType => issue(new BadVarTypeError(v.name, v.pos)); None
           case t =>
-            val symbol = new LocalVarSymbol(v, t)
+            val symbol = new LocalVarSymbol(v.name, t, v.pos)
             ctx.declare(symbol)
             
-            printf("declare name = " + symbol.name + "\n")
+            // printf("declare name = " + symbol.name + "\n")
 
             Some(
               Typed.LocalVarDef(
