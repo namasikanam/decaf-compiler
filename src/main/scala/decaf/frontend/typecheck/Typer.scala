@@ -324,14 +324,14 @@ class Typer(implicit config: Config)
 
       case ExpressionLambda(params, retExpr, scope) =>
         val fctx = ctx.open(scope)
-        val lctx = ctx.open(scope.nestedScope)
+        val lctx = fctx.open(scope.nestedScope)
         val re = typeExpr(retExpr)(lctx)
         val typ = FunType(params.map(_.typeLit.typ), re.typ)
         ExpressionLambda(params, re)(typ)
 
       case BlockLambda(params, block, scope) =>
         val fctx = ctx.open(scope)
-        val lctx = ctx.open(scope.nestedScope)
+        val lctx = fctx.open(scope.nestedScope)
         val (b, retTyp) = checkBlock(block)(lctx)
         val typ = FunType(params.map(_.typeLit.typ), retTyp)
         BlockLambda(params, b)(typ)
@@ -606,12 +606,12 @@ class Typer(implicit config: Config)
                 }
                 MemberMethod(This(), m)(m.typ)
               case _ =>
-                // printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
+                printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
 
                 issue(new UndeclVarError(id, expr.pos)); err
             }
           case None =>
-            // printf("VarSel fail to find " + id.name + ".\n")
+            printf("VarSel fail to find " + id.name + ".\n")
 
             issue(new UndeclVarError(id, expr.pos)); err
         }
