@@ -48,7 +48,15 @@ trait Util extends ErrorIssuer {
         case TLambda(returnType, typeList) =>
           val ret = typeTypeLit(returnType)
           val tl = typeList.map(typeTypeLit)
-          Typed.TLambda(ret, tl)(FunType(tl.map(t => t.typ), ret.typ))
+          if (tl.map(t => t match {
+              case Typed.TVoid() =>
+                issue(new VoidArgError(t.pos)); false
+              case Typed.TVoidArgLambda() => false
+              case _ => true
+          }).fold(true)(_ && _))
+            Typed.TLambda(ret, tl)(FunType(tl.map(t => t.typ), ret.typ))
+          else
+            Typed.TVoidArgLambda()(NoType)
     }
     typed.setPos(typeLit.pos)
   }
@@ -131,7 +139,12 @@ trait Util extends ErrorIssuer {
             // then we shall not report both, but the earlier found one only. In this case, the error of the entire
             // LocalVarDef is caused by the bad typeLit, and thus we don't make further type check.
             None
-          case VoidType => issue(new BadVarTypeError(v.name, v.pos)); None
+          case VoidType =>
+            v.typeLit match {
+                case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
+                case _ =>
+            }
+            None
           case t =>
             val symbol = new LocalVarSymbol(v.name, t, v.pos)
             ctx.declare(symbol)

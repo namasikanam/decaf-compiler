@@ -220,6 +220,8 @@ trait TreeTmpl {
       implicit val annot: TypeLitAnnot
   ) extends TypeLit
 
+  case class TVoidArgLambda()(implicit val annot: TypeLitAnnot) extends TypeLit
+
   /**
     * Statement.
     */

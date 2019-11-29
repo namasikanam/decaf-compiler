@@ -315,7 +315,10 @@ class Namer(implicit config: Config)
             lit.typ match {
               case NoType => None
               case VoidType =>
-                issue(new BadVarTypeError(id.name, v.pos))
+                v.typeLit match {
+                    case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
+                    case _ =>
+                }
                 None
               case t =>
                 val symbol = new MemberVarSymbol(v, t, ctx.currentClass)
