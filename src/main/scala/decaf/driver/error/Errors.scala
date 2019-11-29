@@ -19,16 +19,16 @@ abstract class Error(val msg: String, val pos: Pos = NoPos) extends Exception {
 
 // Lexer errors
 
-class NewlineInStrError(literal: String, pos: Pos)
+case class NewlineInStrError(literal: String, override val pos: Pos)
     extends Error(s"illegal newline in string constant $literal", pos)
 
-class UntermStrError(literal: String, pos: Pos)
+case class UntermStrError(literal: String, override val pos: Pos)
     extends Error(s"unterminated string constant $literal", pos)
 
-class UnrecogCharError(char: Char, pos: Pos)
+case class UnrecogCharError(char: Char, override val pos: Pos)
     extends Error(s"unrecognized character '$char'", pos)
 
-class IntTooLargeError(literal: String, pos: Pos)
+case class IntTooLargeError(literal: String, override val pos: Pos)
     extends Error(s"integer literal $literal is too large", pos)
 
 /**
@@ -43,157 +43,157 @@ class IntTooLargeError(literal: String, pos: Pos)
   * ^
   * }}}
   **/
-class BadEscCharError(pos: Pos) extends Error("illegal escape character", pos)
+case class BadEscCharError(override val pos: Pos) extends Error("illegal escape character", pos)
 
 // Syntax error
 
-class SyntaxError(msg: String, pos: Pos) extends Error("syntax error", pos)
+case class SyntaxError(override val pos: Pos) extends Error("syntax error", pos)
 
 // Namer errors
 
-class BadArrElementError(pos: Pos)
+case class BadArrElementError(override val pos: Pos)
     extends Error("array element type must be non-void known type", pos)
 
-class BadVarTypeError(id: String, pos: Pos)
+case class BadVarTypeError(id: String, override val pos: Pos)
     extends Error(s"cannot declare identifier '$id' as void type", pos)
 
-class BadInheritanceError(pos: Pos)
+case class BadInheritanceError(override val pos: Pos)
     extends Error("illegal class inheritance (should be acyclic)", pos)
 
-class BadOverrideError(fun: String, parent: String, pos: Pos)
+case class BadOverrideError(fun: String, parent: String, override val pos: Pos)
     extends Error(
       s"overriding method '$fun' doesn't match the type signature in class '$parent'",
       pos
     )
 
-class OverridingVarError(id: String, pos: Pos)
+case class OverridingVarError(id: String, override val pos: Pos)
     extends Error(s"overriding variable is not allowed for var '$id'", pos)
 
-class ClassNotFoundError(clazz: String, pos: Pos)
+case class ClassNotFoundError(clazz: String, override val pos: Pos)
     extends Error(s"class '$clazz' not found", pos)
 
-class DeclConflictError(id: String, earlier: Pos, pos: Pos)
+case class DeclConflictError(id: String, earlier: Pos, override val pos: Pos)
     extends Error(
       s"declaration of '$id' here conflicts with earlier declaration at " +
         s"(${earlier.line},${earlier.column})",
       pos
     )
 
-object NoMainClassError
+case object NoMainClassError
     extends Error("no legal Main class named 'Main' was found")
 
-class AbstractOverrideError(id: String, pos: Pos)
+case class AbstractOverrideError(id: String, override val pos: Pos)
     extends Error(
-      s"'$id' is not abstract and does not override all abstract methods",
+      s"'$id' is not abstract and does not val all abstract methods",
       pos
     )
 
 // Typer errors
 
-class BreakOutOfLoopError(pos: Pos)
+case class BreakOutOfLoopError(override val pos: Pos)
     extends Error("'break' is only allowed inside a loop", pos)
 
-class BadTestExpr(pos: Pos)
+case class BadTestExpr(override val pos: Pos)
     extends Error("test expression must have bool type", pos)
 
-class BadPrintArgError(k: Int, actual: Type, pos: Pos)
+case class BadPrintArgError(k: Int, actual: Type, override val pos: Pos)
     extends Error(
       s"incompatible argument $k: $actual given, int/bool/string expected",
       pos
     )
 
-class BadReturnTypeError(expected: Type, actual: Type, pos: Pos)
+case class BadReturnTypeError(expected: Type, actual: Type, override val pos: Pos)
     extends Error(
       s"incompatible return: $actual given, $expected expected",
       pos
     )
 
-class MissingReturnError(pos: Pos)
+case class MissingReturnError(override val pos: Pos)
     extends Error(
       "missing return statement: control reaches end of non-void block",
       pos
     )
 
-class IncompatUnOpError(op: String, exprType: Type, pos: Pos)
+case class IncompatUnOpError(op: String, exprType: Type, override val pos: Pos)
     extends Error(s"incompatible operand: $op $exprType", pos)
 
-class IncompatBinOpError(op: String, lhsType: Type, rhsType: Type, pos: Pos)
+case class IncompatBinOpError(op: String, lhsType: Type, rhsType: Type, override val pos: Pos)
     extends Error(s"incompatible operands: $lhsType $op $rhsType", pos)
 
-class NotArrayError(pos: Pos)
+case class NotArrayError(override val pos: Pos)
     extends Error("[] can only be applied to arrays", pos)
 
-class SubNotIntError(pos: Pos)
+case class SubNotIntError(override val pos: Pos)
     extends Error("array subscript must be an integer", pos)
 
-class BadNewArrayLength(pos: Pos)
+case class BadNewArrayLength(override val pos: Pos)
     extends Error("new array length must be an integer", pos)
 
-class ThisInStaticFuncError(pos: Pos)
+case class ThisInStaticFuncError(override val pos: Pos)
     extends Error("can not use this in static function", pos)
 
-class UndeclVarError(v: String, pos: Pos)
+case class UndeclVarError(v: String, override val pos: Pos)
     extends Error(s"undeclared variable '$v'", pos)
 
-class NotClassError(typ: Type, pos: Pos)
+case class NotClassError(typ: Type, override val pos: Pos)
     extends Error(s"$typ is not a class type", pos)
 
-class FieldNotFoundError(field: String, clazz: ClassType, pos: Pos)
+case class FieldNotFoundError(field: String, clazz: ClassType, override val pos: Pos)
     extends Error(s"field '$field' not found in '$clazz'", pos)
 
-class FieldNotAccessError(field: String, clazz: ClassType, pos: Pos)
+case class FieldNotAccessError(field: String, clazz: ClassType, override val pos: Pos)
     extends Error(s"field '$field' of '$clazz' not accessible here", pos)
 
-class RefNonStaticError(field: String, method: String, pos: Pos)
+case class RefNonStaticError(field: String, method: String, override val pos: Pos)
     extends Error(
       s"can not reference a non-static field '$field' from static method '$method'",
       pos
     )
 
-class NotClassFieldError(field: String, typ: Type, pos: Pos)
+case class NotClassFieldError(field: String, typ: Type, override val pos: Pos)
     extends Error(s"cannot access field '$field' from '$typ'", pos)
 
-class NotClassMethodError(field: String, clazz: ClassType, pos: Pos)
+case class NotClassMethodError(field: String, clazz: ClassType, override val pos: Pos)
     extends Error(s"'$field' is not a method in class '$clazz'", pos)
 
-class BadArgCountError(method: String, expected: Int, actual: Int, pos: Pos)
+case class BadArgCountError(method: String, expected: Int, actual: Int, override val pos: Pos)
     extends Error(
       s"function '$method' expects $expected argument(s) but $actual given",
       pos
     )
 
-class BadArgTypeError(k: Int, expected: Type, actual: Type, pos: Pos)
+case class BadArgTypeError(k: Int, expected: Type, actual: Type, override val pos: Pos)
     extends Error(
       s"incompatible argument $k: $actual given, $expected expected",
       pos
     )
 
-class BadLengthArgError(count: Int, pos: Pos)
+case class BadLengthArgError(count: Int, override val pos: Pos)
     extends Error(
       s"function 'length' expects 0 argument(s) but $count given",
       pos
     )
 
-class NewAbstractError(clazz: String, pos: Pos)
+case class NewAbstractError(clazz: String, override val pos: Pos)
     extends Error(s"cannot instantiate abstract class '$clazz'", pos)
 
-class CallUncallableError(typ: Type, pos: Pos)
+case class CallUncallableError(typ: Type, override val pos: Pos)
     extends Error(s"$typ is not a callable type", pos)
 
-class DeclVoidTypeError(id: String, pos: Pos)
+case class DeclVoidTypeError(id: String, override val pos: Pos)
     extends Error(s"cannot declare identifier '$id' as void type", pos)
 
-class LambdaBadArgCountError(expected: Int, actual: Int, pos: Pos)
+case class LambdaBadArgCountError(expected: Int, actual: Int, override val pos: Pos)
     extends Error(
       s"lambda expression expects $expected argument(s) but $actual given",
       pos
     )
 
 // TODO: what's exact output of this?
-class TypeIncompError(t1: Type, t2: Type) extends Error(s"I don't know what's exact output.\n")
+case class TypeIncompError(t1: Type, t2: Type) extends Error(s"I don't know what's exact output.\n")
 
-class VoidArgError(pos: Pos) extends Error(s"arguments in function type must be non-void known type", pos)
+case class VoidArgError(override val pos: Pos) extends Error(s"arguments in function type must be non-void known type", pos)
 
-class AssignMethodError(name: String, pos: Pos) extends Error(s"cannot assign value to class member method '$name'", pos)
+case class AssignMethodError(name: String, override val pos: Pos) extends Error(s"cannot assign value to class member method '$name'", pos)
 
-class AssCapturedError(pos: Pos) extends Error(s"cannot assign value to captured variables in lambda expression", pos)
+case class AssCapturedError(override val pos: Pos) extends Error(s"cannot assign value to captured variables in lambda expression", pos)

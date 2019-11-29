@@ -130,7 +130,7 @@ class ClassScope(val parent: Option[ClassScope] = None) extends Scope {
     * @return innermost found symbol (if any)
     */
   def lookup(key: String): Option[FieldSymbol] = {
-    printf(s"lookup $key in $this\n")
+    // printf(s"lookup $key in $this\n")
 
     find(key).orElse(parent.flatMap(_.lookup(key)))
   }

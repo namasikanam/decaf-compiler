@@ -4,6 +4,7 @@ import decaf.driver.error._
 import decaf.frontend.annot.TypeImplicit._
 import decaf.frontend.annot._
 import decaf.frontend.tree.SyntaxTree._
+import decaf.frontend.tree.TreeNode._
 import decaf.frontend.tree.{TypedTree => Typed}
 
 /**
@@ -88,118 +89,11 @@ trait Util extends ErrorIssuer {
     }
   }
 
-  /**
-    * Resolve a statement block.
-    *
-    * @param block statement block
-    * @param ctx   scope context
-    * @return resolved block
-    */
-  def resolveBlock(block: Block)(implicit ctx: ScopeContext): Typed.Block = {
-    val localScope = new LocalScope
-    ctx.currentScope match {
-      case s: FormalScope =>
-        s.nestedScope = localScope
-      case s: LambdaScope =>
-        localScope.lambdaFlag = true
-        s.nestedScopes += localScope
-      case s: LocalScope =>
-        s.nestedScopes += localScope
-    }
-    val localCtx = ctx.open(localScope)
-    val ss = block.stmts.map { resolveStmt(_)(localCtx) }
-    Typed.Block(ss)(localScope).setPos(block.pos)
-  }
-
-  def resolveLocalVarDef(v: LocalVarDef)(
-      implicit ctx: ScopeContext,
-      isParam: Boolean = false
-  ): Option[Typed.LocalVarDef] = {
-    ctx.findConflictBefore(v.name, v.pos) match {
-      case Some(earlier) =>
-        issue(new DeclConflictError(v.name, earlier.pos, v.pos))
-        // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
-        // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
-        // expectation.
-        if (isParam) {
-          val typedTypeLit = typeTypeLit(v.typeLit)
-          Some(
-            Typed.LocalVarDef(
-              typedTypeLit,
-              v.id,
-              v.init,
-              v.assignPos
-            )(null)
-          )
-        } else {
-          None
-        }
-      case None =>
-        val typedTypeLit = typeTypeLit(v.typeLit)
-        typedTypeLit.typ match {
-          case NoType =>
-            // NOTE: to avoid flushing a large number of error messages, if we know one error is caused by another,
-            // then we shall not report both, but the earlier found one only. In this case, the error of the entire
-            // LocalVarDef is caused by the bad typeLit, and thus we don't make further type check.
-            None
-          case VoidType =>
-            v.typeLit match {
-                case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
-                case _ =>
-            }
-            None
-          case t =>
-            val symbol = new LocalVarSymbol(v.name, t, v.pos)
-            ctx.declare(symbol)
-            
-            // printf("declare name = " + symbol.name + "\n")
-
-            Some(
-              Typed.LocalVarDef(
-                typedTypeLit,
-                v.id,
-                v.init,
-                v.assignPos
-              )(symbol)
-            )
-        }
-    }
-  }
-
-  def resolveStmt(stmt: Stmt)(implicit ctx: ScopeContext): Typed.Stmt = {
-    val checked = stmt match {
-      case block: Block     => resolveBlock(block)
-      case v: LocalVarDef   => resolveLocalVarDef(v).getOrElse(Typed.Skip())
-      case Assign(lhs, rhs) => Typed.Assign(lhs, rhs)
-      case ExprEval(expr)   => Typed.ExprEval(expr)
-      case Skip()           => Typed.Skip()
-      case If(cond, trueBranch, falseBranch) =>
-        val t = resolveBlock(trueBranch)
-        val f = falseBranch.map(resolveBlock)
-        Typed.If(cond, t, f)
-      case While(cond, body)             => Typed.While(cond, resolveBlock(body))
-      case For(init, cond, update, body) =>
-        // Since `init` and `update` may declare local variables, we must first open the local scope of `body`, and
-        // then resolve `init`, `update` and statements inside `body`.
-        val localScope = new LocalScope
-        ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += localScope
-        val localCtx = ctx.open(localScope)
-        val i = resolveStmt(init)(localCtx)
-        val u = resolveStmt(update)(localCtx)
-        val ss = body.stmts.map { resolveStmt(_)(localCtx) }
-        val b = Typed.Block(ss)(localScope).setPos(body.pos)
-        Typed.For(i, cond, u, b)
-      case Break()      => Typed.Break()
-      case Return(expr) => Typed.Return(expr)
-      case Print(exprs) => Typed.Print(exprs)
-    }
-    checked.setPos(stmt.pos)
-  }
-
   def typeUpperBound(tl: List[Type]): Type = tl.reduce(typeUpperBound2)
 
   def typeUpperBound2(_t1: Type, _t2: Type): Type = {
-      if (_t1 == NullType && _t2 == NullType) NullType
+      if (_t1 == NoType || _t2 == NoType) NoType
+      else if (_t1 == NullType && _t2 == NullType) NullType
       else {
         var t1: Type = NoType
         var t2: Type = NoType
@@ -230,7 +124,8 @@ trait Util extends ErrorIssuer {
   def typeLowerBound(tl: List[Type]): Type = tl.reduce(typeLowerBound2)
 
   def typeLowerBound2(_t1: Type, _t2: Type): Type = {
-      if (_t1 == NullType && _t2 == NullType) NullType
+      if (_t1 == NoType || _t2 == NoType) NoType
+      else if (_t1 == NullType && _t2 == NullType) NullType
       else {
         var t1: Type = NoType
         var t2: Type = NoType
@@ -265,6 +160,67 @@ trait Util extends ErrorIssuer {
         else {
             // printf(s"Not equal:\n domain = ${domain}, scopes.last = ${scopes.last}\n")
             checkSameLocal(domain, scopes.tail)
+        }
+    }
+  }
+
+  def resolveLocalVarDef(v: LocalVarDef)(
+      implicit ctx: ScopeContext,
+      isParam: Boolean = false
+  ): Option[Typed.LocalVarDef] = {
+    ctx.findConflictBefore(v.name, v.pos) match {
+      case Some(earlier) =>
+        printf(s"At ${v.pos}, DeclConflictError occurs when resolving LocalVarDef\n")
+
+        issue(new DeclConflictError(v.name, earlier.pos, v.pos))
+        // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
+        // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
+        // expectation.
+        if (isParam) {
+          val typedTypeLit = typeTypeLit(v.typeLit)
+          Some(
+            Typed.LocalVarDef(
+              typedTypeLit,
+              v.id,
+              v.init,
+              v.assignPos
+            )(null)
+          )
+        } else {
+          // Remain lambda, but do not to declare
+          // Append the id with a random string for convenience
+          None
+        }
+      case None =>
+        printf(s"At ${v.pos}, here's no conflict with ${v.name}!\n")
+
+        val typedTypeLit = typeTypeLit(v.typeLit)
+        typedTypeLit.typ match {
+          case NoType =>
+            // NOTE: to avoid flushing a large number of error messages, if we know one error is caused by another,
+            // then we shall not report both, but the earlier found one only. In this case, the error of the entire
+            // LocalVarDef is caused by the bad typeLit, and thus we don't make further type check.
+            None
+          case VoidType =>
+            v.typeLit match {
+                case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
+                case _ =>
+            }
+            None
+          case t =>
+            val symbol = new LocalVarSymbol(v.name, t, v.pos)
+            ctx.declare(symbol)
+            
+            // printf("declare name = " + symbol.name + "\n")
+
+            Some(
+              Typed.LocalVarDef(
+                typedTypeLit,
+                v.id,
+                v.init,
+                v.assignPos
+              )(symbol)
+            )
         }
     }
   }

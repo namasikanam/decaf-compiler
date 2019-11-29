@@ -105,7 +105,7 @@ class Parser(implicit config: Config)
         msg: String,
         e: RecognitionException
     ): Unit = {
-      throw new SyntaxError(msg, new Pos(lineNumber, charPositionInLine + 1))
+      throw new SyntaxError(new Pos(lineNumber, charPositionInLine + 1))
     }
   }
 

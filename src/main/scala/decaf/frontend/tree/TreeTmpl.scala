@@ -1,6 +1,6 @@
 package decaf.frontend.tree
 
-import decaf.frontend.annot.{Annot, Annotated}
+import decaf.frontend.annot._
 import decaf.frontend.parsing.{NoPos, Pos}
 import decaf.frontend.tree.TreeNode._
 
@@ -201,6 +201,9 @@ trait TreeTmpl {
 
   /**
     * Var type: {{{ 'var' }}}
+    * 
+    * This means that it can't be read directly in the Namer,
+    * but will wait to Type to calculate the type.
     */
   case class TVar()(implicit val annot: TypeLitAnnot) extends TypeLit
 
@@ -488,9 +491,13 @@ trait TreeTmpl {
     * @param params  parameter list
     * @param expr    expression
     */
-  case class ExpressionLambda(params: List[LocalVarDef], expr: Expr)(
+  case class ExpressionLambda(
+      params: List[LocalVarDef],
+      expr: Expr,
+      var scope: FormalScope = new FormalScope
+  )(
       implicit val annot: ExprAnnot
-  ) extends Expr {
+  ) extends Expr{
     override def productPrefix: String = "Lambda"
   }
 
@@ -499,10 +506,15 @@ trait TreeTmpl {
     *
     * @param params  parameter list
     * @param block   block
+    * @param scope   
     */
-  case class BlockLambda(params: List[LocalVarDef], block: Block)(
+  case class BlockLambda(
+      params: List[LocalVarDef],
+      block: Block,
+      var scope: FormalScope = new FormalScope
+  )(
       implicit val annot: ExprAnnot
-  ) extends Expr {
+  ) extends Expr{
     override def productPrefix: String = "Lambda"
   }
 
@@ -560,4 +572,33 @@ trait TreeTmpl {
   case class ClassCast(obj: Expr, to: ClassRef)(implicit val annot: ExprAnnot)
       extends Expr
 
+  /**
+    * Field selection, or simply a local variable.
+    * {{{
+    *   (receiver '.')? variable
+    * }}}
+    *
+    * @param receiver target instance
+    * @param variable identifier of the selected variable
+    */
+  case class VarSel(receiver: Option[Expr], variable: Id)(
+      implicit val annot: ExprAnnot
+  ) extends LValue {
+
+    def withReceiver(receiver: Expr): VarSel =
+      VarSel(Some(receiver), variable)(annot).setPos(pos)
+  }
+
+  /**
+    * Call.
+    * {{{
+    *   expr '(' expr1 ','  expr2 ',' ... ')'
+    * }}}
+    *
+    * @param expr       called method
+    * @param exprList   a list of expressions as arguments
+    */
+  case class Call(expr: Expr, exprList: List[Expr])(
+      implicit val annot: ExprAnnot
+  ) extends Expr
 }

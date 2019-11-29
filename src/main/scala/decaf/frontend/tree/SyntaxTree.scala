@@ -40,34 +40,4 @@ object SyntaxTree extends TreeTmpl {
 
   // The following nodes only appear in a syntax tree.
 
-  /**
-    * Field selection, or simply a local variable.
-    * {{{
-    *   (receiver '.')? variable
-    * }}}
-    *
-    * @param receiver target instance
-    * @param variable identifier of the selected variable
-    */
-  case class VarSel(receiver: Option[Expr], variable: Id)(
-      implicit val annot: ExprAnnot
-  ) extends LValue {
-
-    def withReceiver(receiver: Expr): VarSel =
-      VarSel(Some(receiver), variable)(annot).setPos(pos)
-  }
-
-  /**
-    * Call.
-    * {{{
-    *   expr '(' expr1 ','  expr2 ',' ... ')'
-    * }}}
-    *
-    * @param expr       called method
-    * @param exprList   a list of expressions as arguments
-    */
-  case class Call(expr: Expr, exprList: List[Expr])(
-      implicit val annot: ExprAnnot
-  ) extends Expr
-
 }

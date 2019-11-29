@@ -30,5 +30,5 @@ trait ErrorIssuer {
     */
   def printErrors(to: PrintStream = System.err): Unit = errors.sortBy(_.pos).foreach(to.println)
 
-  private val errors = new mutable.ArrayBuffer[Error]
+  var errors = new mutable.ArrayBuffer[Error]
 }

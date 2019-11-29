@@ -10,6 +10,8 @@ import decaf.frontend.parsing.Pos
 import decaf.frontend.tree.SyntaxTree.NoAnnot
 import decaf.frontend.tree.TreeNode._
 import decaf.frontend.tree.TypedTree._
+// Even I remain "Syn" existing here,
+// the syntax tree de facto won't be used in this file.
 import decaf.frontend.tree.{SyntaxTree => Syn}
 import decaf.lowlevel.log.IndentPrinter
 import decaf.printing.PrettyScope
@@ -44,11 +46,11 @@ class Typer(implicit config: Config)
           case v: VarDef => v
           case m @ MethodDef(mod, id, returnType, params, body) =>
             val formalCtx = ctx.open(m.symbol.scope)
-            val (checkedBody, returns) = checkBlock(body)(formalCtx)
+            val (checkedBody, returnType) = checkBlock(body)(formalCtx)
             // Check if the body always returns a value, when the method is non-void
-            if (!m.isAbstract && !m.symbol.returnType.isVoidType && !returns)
+            if (!m.isAbstract && !m.symbol.returnType.isVoidType && returnType == NoType)
               issue(new MissingReturnError(checkedBody.pos))
-            MethodDef(mod, id, returnType, params, checkedBody)(m.symbol)
+            MethodDef(mod, id, fromTypeToTypeLit(returnType)(ctx), params, checkedBody)(m.symbol)
               .setPos(m.pos)
         }
         ClassDef(id, parent, checkedFields)(symbol).setPos(clazz.pos)
@@ -75,18 +77,26 @@ class Typer(implicit config: Config)
     *
     * @param block      statement block
     * @param ctx        scope context
-    * @param insideLoop are we inside a loop?
+    * @param insideLoop are we inside a loop? This exists for check stmt [[Break]].
     * @return a pair: the typed block, and a boolean indicating if this block returns a value
     */
   def checkBlock(block: Block)(
       implicit ctx: ScopeContext,
       insideLoop: Boolean = false
-  ): (Block, Boolean) = {
+  ): (Block, Type) = {
     val localCtx = ctx.open(block.scope)
     val ss = block.stmts.map { checkStmt(_)(localCtx, insideLoop) }
-    val returns = ss.nonEmpty && ss.last._2 // a block returns a value iff its last statement does so
+    // Find the last [[stmt]] who has a correct return type
+    val returnTypes = ss.filter(
+        _._2 != NoType
+    ).map(_._2)
+    val returnType = returnTypes.length match {
+        case 0 => VoidType
+        case 1 => returnTypes.head
+        case _ => returnTypes.reduce(typeUpperBound2)
+    }
 
-    (Block(ss.map(_._1))(block.scope).setPos(block.pos), returns)
+    (Block(ss.map(_._1))(block.scope).setPos(block.pos), returnType)
   }
 
   /**
@@ -99,8 +109,8 @@ class Typer(implicit config: Config)
     */
   def checkStmt(
       stmt: Stmt
-  )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Boolean) = {
-    // printf(s"checkStmt $stmt\n")
+  )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type) = {
+    // printf(s"At ${stmt.pos}, checkStmt $stmt\n")
 
     val checked = stmt match {
       case block: Block => checkBlock(block)
@@ -138,13 +148,13 @@ class Typer(implicit config: Config)
               )
             } else
               ctx.declare(new LocalVarSymbol(v, r.typ))
-            (LocalVarDef(typeLit, v.id, Some(r))(v.symbol), false)
+            (LocalVarDef(typeLit, v.id, Some(r))(v.symbol), NoType)
           case None =>
             v.typeLit match {
               case TVar() => issue(new DeclVoidTypeError(v.id.name, v.pos))
               case _      => ;
             }
-            (v, false)
+            (v, NoType)
         }
 
       case Assign(lhs, rhs) =>
@@ -168,26 +178,26 @@ class Typer(implicit config: Config)
             issue(new IncompatBinOpError("=", l.typ, r.typ, stmt.pos))
           case _ => // do nothing
         }
-        (Assign(l, r), false)
+        (Assign(l, r), NoType)
 
       case ExprEval(expr) =>
         val e = typeExpr(expr)
-        (ExprEval(e), false)
+        (ExprEval(e), NoType)
 
-      case Skip() => (Skip(), false)
+      case Skip() => (Skip(), NoType)
 
       case If(cond, trueBranch, falseBranch) =>
         val c = checkTestExpr(cond)
-        val (t, trueReturns) = checkBlock(trueBranch)
+        val (t, trueReturnType) = checkBlock(trueBranch)
         val f = falseBranch.map(checkBlock)
         // if-stmt returns a value if both branches return
-        val returns = trueReturns && f.isDefined && f.get._2
+        val returns = typeUpperBound2(trueReturnType, f.getOrElse((NoType, NoType))._2)
         (If(c, t, f.map(_._1)), returns)
 
       case While(cond, body) =>
         val c = checkTestExpr(cond)
         val (b, _) = checkBlock(body)(ctx, insideLoop = true)
-        (While(c, b), false)
+        (While(c, b), NoType)
 
       case For(init, cond, update, body) =>
         // Since `init` and `update` may declare local variables, remember to first open the local scope of `body`.
@@ -197,11 +207,11 @@ class Typer(implicit config: Config)
         val (u, _) = checkStmt(update)(local, insideLoop)
         val ss = body.stmts.map { checkStmt(_)(local, insideLoop = true) }
         val b = Block(ss.map(_._1))(body.scope)
-        (For(i, c, u, b), false)
+        (For(i, c, u, b), NoType)
 
       case Break() =>
         if (!insideLoop) issue(new BreakOutOfLoopError(stmt.pos))
-        (Break(), false)
+        (Break(), NoType)
 
       case Return(expr) =>
         val expected = ctx.currentMethod.returnType
@@ -212,7 +222,10 @@ class Typer(implicit config: Config)
         val actual = e.map(_.typ).getOrElse(VoidType)
         if (actual.noError && !ctx.currentScope.isLambda && !(actual <= expected))
           issue(new BadReturnTypeError(expected, actual, stmt.pos))
-        (Return(e), e.isDefined)
+        (Return(e), e match {
+            case Some(e1) => e1.typ
+            case None => NoType
+        })
 
       case Print(exprs) =>
         val es = exprs.zipWithIndex.map {
@@ -222,7 +235,7 @@ class Typer(implicit config: Config)
               issue(new BadPrintArgError(i + 1, e.typ, expr.pos))
             e
         }
-        (Print(es), false)
+        (Print(es), NoType)
     }
 
     checked match {
@@ -238,7 +251,7 @@ class Typer(implicit config: Config)
     * @return true if it has type bool
     */
   private def checkTestExpr(
-      expr: Syn.Expr
+      expr: Expr
   )(implicit ctx: ScopeContext): Expr = {
     val e = typeExpr(expr)
     if (e.typ !== BoolType) issue(new BadTestExpr(expr.pos))
@@ -254,7 +267,7 @@ class Typer(implicit config: Config)
     * @param ctx  scope context
     * @return typed expression
     */
-  def typeExpr(expr: Syn.Expr)(implicit ctx: ScopeContext): Expr = {
+  def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
     printf(
       "testExpr(toString = \"%s\") at (%d, %d)\n",
       expr.toString,
@@ -265,17 +278,17 @@ class Typer(implicit config: Config)
     val err = UntypedExpr(expr)
 
     val typed = expr match {
-      case e: Syn.LValue => typeLValue(e)
+      case e: LValue => typeLValue(e)
 
-      case Syn.IntLit(v)    => IntLit(v)(IntType)
-      case Syn.BoolLit(v)   => BoolLit(v)(BoolType)
-      case Syn.StringLit(v) => StringLit(v)(StringType)
-      case Syn.NullLit()    => NullLit()(NullType)
+      case IntLit(v)    => IntLit(v)(IntType)
+      case BoolLit(v)   => BoolLit(v)(BoolType)
+      case StringLit(v) => StringLit(v)(StringType)
+      case NullLit()    => NullLit()(NullType)
 
-      case Syn.ReadInt()  => ReadInt()(IntType)
-      case Syn.ReadLine() => ReadLine()(StringType)
+      case ReadInt()  => ReadInt()(IntType)
+      case ReadLine() => ReadLine()(StringType)
 
-      case Syn.Unary(op, operand) =>
+      case Unary(op, operand) =>
         val e = typeExpr(operand)
         e.typ match {
           case NoType => // avoid nested errors
@@ -289,7 +302,7 @@ class Typer(implicit config: Config)
         // must have type int! Thus, we simply _assume_ it has type int, rather than `NoType`.
         Unary(op, e)(resultTypeOf(op))
 
-      case Syn.Binary(op, lhs, rhs) =>
+      case Binary(op, lhs, rhs) =>
         val l = typeExpr(lhs)
         val r = typeExpr(rhs)
         (l.typ, r.typ) match {
@@ -300,88 +313,43 @@ class Typer(implicit config: Config)
         }
         Binary(op, l, r)(resultTypeOf(op)) // make a fair guess
 
-      case el @ Syn.ExpressionLambda(params, expr) =>
-        // open a formal scope and typecheck parameters
-        val formalScope = new FormalScope
-        formalScope.ownerMethod = ctx.currentMethod
-        val formalCtx: ScopeContext = ctx.open(formalScope) // open a scope
-        // resolve local VarDef
-        val ps = params.flatMap {
-          resolveLocalVarDef(_)(formalCtx, true)
-        }
-        // open a nested lambda scope and typecheck expresssions
-        val lambdaScope = new LambdaScope
-        formalScope.nestedScope = lambdaScope
-        val lambdaCtx = formalCtx.open(lambdaScope)
-        val e = typeExpr(expr)(lambdaCtx) // type check the returning expression of the lambda expression
-        val typ = FunType(ps.map(_.typeLit.typ), e.typ)
-        val symbol = new LambdaSymbol(typ, formalScope, el.pos) // 
-        ctx.declare(symbol)
-        ExpressionLambda(ps, e)(typ)
+      case ExpressionLambda(params, retExpr, scope) =>
+        val fctx = ctx.open(scope)
+        val lctx = ctx.open(scope.nestedScope)
+        val re = typeExpr(retExpr)(lctx)
+        val typ = FunType(params.map(_.typeLit.typ), re.typ)
+        ExpressionLambda(params, re)(typ)
 
-      case eb @ Syn.BlockLambda(params, block) =>
-        // open a formal scope and typecheck parameters
-        val formalScope = new FormalScope
-        formalScope.ownerMethod = ctx.currentMethod
-        val formalCtx: ScopeContext = ctx.open(formalScope) // open a scope
-        // resolve local VarDef
-        val ps = params.flatMap {
-          resolveLocalVarDef(_)(formalCtx, true)
-        }
-        // open a nested lambda scope and typecheck expresssions
-        val lambdaScope = new LambdaScope
-        formalScope.nestedScope = lambdaScope
-        val lambdaCtx = formalCtx.open(lambdaScope)
-        // resolve [[block]] and typecheck
-        val b = Block(block.stmts.map{
-            resolveStmt(_)(lambdaCtx)
-        }.map{
-            checkStmt(_)(lambdaCtx, false)._1
-        })(lambdaScope).setPos(block.pos)
-        val retTyps = b.stmts.filter(stmt => stmt match {
-            case Return(e) => true
-            case _ => false
-        }).map(stmt => stmt match {
-            case Return(Some(expr)) => expr.typ
-            case Return(None) => VoidType
-            case _ => NoType
-        })
+      case BlockLambda(params, block, scope) =>
+        val fctx = ctx.open(scope)
+        val lctx = ctx.open(scope.nestedScope)
+        val (b, retTyp) = checkBlock(block)(lctx)
+        val typ = FunType(params.map(_.typeLit.typ), retTyp)
+        BlockLambda(params, b)(typ)
 
-        printf(s"There ${retTyps.length} return stmts\n")
-
-        val retTyp = if (retTyps.length == 0) VoidType
-        else if (retTyps.length == 1) retTyps.head
-        else retTyps.reduce(typeUpperBound2)
-        // Build the whold block lambda
-        val typ = FunType(ps.map(_.typeLit.typ), retTyp)
-        val symbol = new LambdaSymbol(typ, formalScope, eb.pos) 
-        ctx.declare(symbol)
-        BlockLambda(ps, b)(typ)
-
-      case Syn.NewArray(elemType, length) =>
-        val t = typeTypeLit(elemType)
+      case UnTypedNewArray(elemType, length) =>
         val l = typeExpr(length)
-        if (t.typ.isVoidType) issue(new BadArrElementError(elemType.pos))
+        if (elemType.typ.isVoidType) issue(new BadArrElementError(elemType.pos))
         if (l.typ !== IntType) issue(new BadNewArrayLength(length.pos))
-        NewArray(t, l)(ArrayType(t.typ)) // make a fair guess
+        NewArray(elemType, l)(ArrayType(elemType.typ)) // make a fair guess
 
-      case Syn.NewClass(id) =>
+      case UnTypedNewClass(id) =>
         ctx.global.find(id) match {
-          case Some(clazz) =>
-            if (clazz.isAbstract) {
-              issue(new NewAbstractError(id, expr.pos))
-              err
-            } else NewClass(clazz)(clazz.typ)
-          case None => issue(new ClassNotFoundError(id, expr.pos)); err
-        }
+            case Some(clazz) =>
+                if (clazz.isAbstract) {
+                    issue(new NewAbstractError(id, expr.pos))
+                    err
+                } else NewClass(clazz)(clazz.typ)
+            case None => issue(new ClassNotFoundError(id, expr.pos)); err
+            }
 
-      case Syn.This() =>
+      case This() =>
         if (ctx.currentMethod.isStatic)
-          issue(new ThisInStaticFuncError(expr.pos))
-        This()(ctx.currentClass.typ) // make a fair guess
+            issue(new ThisInStaticFuncError(expr.pos))
+        This()(ctx.currentClass.typ)
 
       // Call
-      case call @ Syn.Call(Syn.VarSel(Some(Syn.VarSel(None, id)), method), _)
+      case call @ Call(VarSel(Some(VarSel(None, id)), method), _)
           if ctx.global.contains(id) =>
         // Special case: invoking a static method, like MyClass.foo()
         val clazz = ctx.global(id)
@@ -407,8 +375,8 @@ class Typer(implicit config: Config)
             issue(new FieldNotFoundError(method, clazz.typ, method.pos)); err
         }
 
-      case call @ Syn.Call(Syn.VarSel(receiver, method), args) =>
-        printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
+      case call @ Call(VarSel(receiver, method), args) =>
+        // printf(s"Call((receiver = $receiver, method = $method), args = $args)\n")
 
         val r = receiver.map(typeExpr)
         r.map(_.typ) match {
@@ -504,7 +472,7 @@ class Typer(implicit config: Config)
         }
 
       // TODO: I don't know how to call a simple function here……
-      case call @ Syn.Call(func, args) =>
+      case call @ Call(func, args) =>
         val f = typeExpr(func)
         f.typ match {
           case NoType => err
@@ -526,27 +494,27 @@ class Typer(implicit config: Config)
             err
         }
 
-      case Syn.ClassTest(obj, clazz) =>
-        val o = typeExpr(obj)
-        if (!o.typ.isClassType) issue(new NotClassError(o.typ, expr.pos))
-        ctx.global.find(clazz) match {
-          case Some(c) => ClassTest(o, c)(BoolType)
-          case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
-        }
-
-      case Syn.ClassCast(obj, clazz) =>
+      case UnTypedClassTest(obj, clazz) =>
         val o = typeExpr(obj)
         if (!o.typ.isClassType) issue(new NotClassError(o.typ, o.pos))
         ctx.global.find(clazz) match {
-          case Some(c) => ClassCast(o, c)(c.typ)
-          case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
+            case Some(c) => ClassTest(o, c)(BoolType)
+            case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
+        }
+
+      case UnTypedClassCast(obj, clazz) =>
+        val o = typeExpr(obj)
+        if (!o.typ.isClassType) issue(new NotClassError(o.typ, o.pos))
+        ctx.global.find(clazz) match {
+            case Some(c) => ClassCast(o, c)(c.typ)
+            case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
         }
     }
     typed.setPos(expr.pos)
   }
 
   private def typeCall(
-      call: Syn.Call,
+      call: Call,
       receiver: Option[Expr],
       method: MethodSymbol
   )(implicit ctx: ScopeContext): Expr = {
@@ -583,14 +551,14 @@ class Typer(implicit config: Config)
   }
 
   private def typeLValue(
-      expr: Syn.LValue
+      expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
     val err = UntypedLValue(expr)
 
     val typed = expr match {
       // Variable, which should be complicated since a legal variable could refer to a local var,
       // a visible member var (, and a class name).
-      case Syn.VarSel(None, id) =>
+      case VarSel(None, id) =>
         // printf("VarSel(None, " + id.name + ")\n")
 
         // Be careful we may be inside the initializer, if so, load the correct "before position".
@@ -639,7 +607,7 @@ class Typer(implicit config: Config)
             issue(new UndeclVarError(id, expr.pos)); err
         }
 
-      case Syn.VarSel(Some(Syn.VarSel(None, id)), f)
+      case VarSel(Some(VarSel(None, id)), f)
           if ctx.global.contains(id) =>
         // special case like MyClass.foo: report error cannot access field 'foo' from 'class : MyClass'
         val clazz = ctx.global(id)
@@ -660,7 +628,7 @@ class Typer(implicit config: Config)
             issue(new FieldNotFoundError(f, clazz.typ, f.pos)); err
         }
 
-      case Syn.VarSel(Some(receiver), id) =>
+      case VarSel(Some(receiver), id) =>
         val r = typeExpr(receiver)
         r.typ match {
           case NoType => err
@@ -685,7 +653,7 @@ class Typer(implicit config: Config)
           case t => issue(new NotClassFieldError(id, t, expr.pos)); err
         }
 
-      case Syn.IndexSel(array, index) =>
+      case IndexSel(array, index) =>
         val a = typeExpr(array)
         val i = typeExpr(index)
         val typ = a.typ match {
