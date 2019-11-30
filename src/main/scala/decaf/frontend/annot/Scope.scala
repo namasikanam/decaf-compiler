@@ -93,7 +93,8 @@ sealed trait Scope extends Annot {
   def isLocal: Boolean = false
 
   /** Is this a lambda scope? */
-  def isLambda: Boolean = false
+  var lambdaFlag = false
+  def isLambda: Boolean = lambdaFlag
 
   override def toString: String =
     "{ " + (symbols.map {
@@ -177,9 +178,6 @@ class LocalScope extends Scope {
 
   override def isLocal: Boolean = true
 
-  var lambdaFlag = false
-  override def isLambda: Boolean = lambdaFlag
-
   /**
     * Directly (possibly ''cross-level'') nested local scopes of this scope.
     *
@@ -192,8 +190,8 @@ class LocalScope extends Scope {
     * }}}
     * although block 2 is not a direct child of block 1, block 2 is still directly nested in block 1.
     */
-  val nestedScopes: mutable.ArrayBuffer[LocalScope] =
-    new mutable.ArrayBuffer[LocalScope]
+  val nestedScopes: mutable.ArrayBuffer[Scope] =
+    new mutable.ArrayBuffer[Scope]
 }
 
 /**
@@ -244,7 +242,8 @@ class ScopeContext private (
     * @return a new scope context after opening `scope`
     */
   def open(scope: Scope): ScopeContext = {
-    //   printf("open scope " + scope.toString + ".\n")
+      printf(s"Before open, ownerMethod = ${currentMethod}\n")
+      printf(s"open scope $scope\n")
 
       scope match {
         case s: ClassScope =>
@@ -256,7 +255,7 @@ class ScopeContext private (
         case s: FormalScope =>
         if (s.isLambda) new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
         else {
-            // printf(s"open a new method: ${s.ownerMethod}\n")
+            printf(s"open a new method: ${s.ownerMethod}\n")
 
             new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
         }

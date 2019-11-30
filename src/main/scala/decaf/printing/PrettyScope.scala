@@ -67,12 +67,6 @@ class PrettyScope(printer: IndentPrinter)
           s.values.foreach { symbol =>
             printer.println(symbol.toString)
           }
-
-          // TODO: The order perhaps not right
-          s.values.foreach{symbol => symbol match {
-            case sym: LambdaSymbol => pretty(sym.scope)
-            case _ =>
-          }}
         }
         s.nestedScopes.foreach(pretty)
       }
@@ -82,16 +76,7 @@ class PrettyScope(printer: IndentPrinter)
         if (s.isEmpty) {
           printer.println("<empty>")
         } else {
-        //   printf(s"${s.values}\n")
-
           s.values.foreach{symbol => printer.println(symbol.toString)}
-
-          // TODO: The order is perhaps not right
-          s.values.foreach{symbol => symbol match {
-            case sym: LambdaSymbol => pretty(sym.scope)
-            case _ =>
-          }}
-        }
         s.nestedScopes.foreach(pretty)
       }
   }

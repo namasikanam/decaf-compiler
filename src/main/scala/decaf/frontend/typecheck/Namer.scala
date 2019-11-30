@@ -136,6 +136,8 @@ class Namer(implicit config: Config)
     }
     if (hasError) return Typed.TopLevel(Nil)(ctx.global)
 
+    printf("=======================Namer End===========================\n")
+
     Typed.TopLevel(resolvedClasses)(ctx.global).setPos(tree.pos)
   }
 
@@ -345,6 +347,9 @@ class Namer(implicit config: Config)
             val funType = FunType(typedParams.map(_.typeLit.typ), retType)
             val symbol =
               new MethodSymbol(m, funType, formalScope, ctx.currentClass)
+            
+            printf(s"Build MethodSymbol: the ownerMethod of scope of MethodSymbol $symbol is ${symbol.scope.ownerMethod}\n")
+
             ctx.declare(symbol)
             val block = resolveBlock(body)(formalCtx)
             Some(Typed.MethodDef(mod, id, rt, typedParams, block)(symbol))
@@ -407,8 +412,10 @@ class Namer(implicit config: Config)
         case Binary(op, lhs, rhs) => Typed.Binary(op, resolveExpr(lhs), resolveExpr(rhs))(VarType)
 
         case ExpressionLambda(params, retExpr, formalScope) =>
+            ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += formalScope
             // open a formal scope and resolve all parameters of it
             formalScope.ownerMethod = ctx.currentMethod
+            formalScope.lambdaFlag = true
             val formalCtx = ctx.open(formalScope)
             // resolve all parameters
             val ps = params.flatMap{resolveLocalVarDef(_)(formalCtx, true)}
@@ -424,8 +431,10 @@ class Namer(implicit config: Config)
             Typed.ExpressionLambda(ps, re, formalScope)(typ)
 
         case BlockLambda(params, block, formalScope) =>
+            ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += formalScope
             // open a formal scope and resolve all parameters of it
             formalScope.ownerMethod = ctx.currentMethod
+            formalScope.lambdaFlag = true
             val formalCtx = ctx.open(formalScope)
             val ps = params.flatMap{resolveLocalVarDef(_)(formalCtx, true)}
             // open a nested lambda scope and resolve in it

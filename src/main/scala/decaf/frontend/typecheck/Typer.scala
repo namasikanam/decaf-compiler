@@ -94,7 +94,7 @@ class Typer(implicit config: Config)
   ): (Block, Type) = {
     val localCtx = ctx.open(block.scope)
 
-    // printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
+    printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
 
     val ss = block.stmts.map { checkStmt(_)(localCtx, insideLoop) }
     // Find the last [[stmt]] who has a correct return type
@@ -121,7 +121,7 @@ class Typer(implicit config: Config)
   def checkStmt(
       stmt: Stmt
   )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type) = {
-    // printf(s"At ${stmt.pos}, checkStmt $stmt\n")
+    printf(s"At ${stmt.pos}, checkStmt $stmt\n")
 
     val checked = stmt match {
       case block: Block => checkBlock(block)
@@ -223,16 +223,16 @@ class Typer(implicit config: Config)
         (Break(), NoType)
 
       case Return(expr) =>
-        // printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
-        // printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
-        // printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
-
         val e = expr match {
           case Some(e1) => Some(typeExpr(e1))
           case None     => None
         }
         val actual = e.map(_.typ).getOrElse(VoidType)
         if (!ctx.currentScope.isLambda) {
+            printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
+            printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
+            printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
+
             val expected = ctx.currentMethod.typ.ret
             if (actual.noError && !(actual <= expected))
             issue(new BadReturnTypeError(expected, actual, stmt.pos))
