@@ -215,6 +215,12 @@ trait TreeTmpl {
   case class TNull()(implicit val annot: TypeLitAnnot) extends TypeLit
 
   /**
+   * Representing an error type.
+   * Corresponding to [[NoType]]
+   */
+  case class TError()(implicit val annot: TypeLitAnnot) extends TypeLit
+
+  /**
     * Lambda type: {{{ type ( type, ...) }}}
     *
     * @param returnType the type of return value

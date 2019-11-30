@@ -16,6 +16,7 @@ import decaf.frontend.tree.{SyntaxTree => Syn}
 import decaf.lowlevel.log.IndentPrinter
 import decaf.printing.PrettyScope
 import java.beans.Expression
+import scala.collection.mutable
 
 /**
   * The typer phase: type check every statement and expression. It starts right after [[Namer]].
@@ -127,38 +128,36 @@ class Typer(implicit config: Config)
 
       case v: LocalVarDef =>
         v.init match {
-          case Some(expr) =>
+          case Some(initExpr) =>
             // Special: we need to be careful that the initializer may cyclically refer to the declared variable, e.g.
             // var x = x + 1.
             //     ^
             //     before pos
             // So, we must rectify the "before pos" as the position of the declared variable.
-            correctBeforePos = Some(v.id.pos)
-            initializedID = Some(v.id)
-            val r = typeExpr(expr)
-            correctBeforePos = None // recover
-            initializedID = None
+            initVars += v.name
+            val typeInitExpr = typeExpr(initExpr)
+            initVars -= v.name
 
-            val typeLit = v.typeLit match {
+            val declTypeLit = v.typeLit match {
               case TVar() =>
                 // printf(s"Auto inference: type = ${r.typ}\n")
 
-                val t = fromTypeToTypeLit(r.typ)
-                t match {
-                  case TVoid() | TVar() =>
+                val t = fromTypeToTypeLit(typeInitExpr.typ)
+                typeInitExpr.typ match {
+                  case VoidType =>
                     issue(new DeclVoidTypeError(v.id.name, v.pos))
-                  case _ => ;
+                  case _ =>
                 }
                 t
               case t => t
             }
-            if (!(r.typ <= typeLit.typ)) {
+            if (!(typeInitExpr.typ <= declTypeLit.typ)) {
               issue(
-                new IncompatBinOpError("=", typeLit.typ, r.typ, v.assignPos)
+                new IncompatBinOpError("=", declTypeLit.typ, typeInitExpr.typ, v.assignPos)
               )
             } else
-              ctx.declare(new LocalVarSymbol(v, typeLit.typ))
-            (LocalVarDef(typeLit, v.id, Some(r))(v.symbol), NoType)
+              ctx.declare(new LocalVarSymbol(v, declTypeLit.typ))
+            (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(v.symbol), NoType)
           case None =>
             v.typeLit match {
               case TVar() => issue(new DeclVoidTypeError(v.id.name, v.pos))
@@ -228,18 +227,17 @@ class Typer(implicit config: Config)
         // printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
         // printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
 
-        val expected = ctx.currentMethod.typ.ret
         val e = expr match {
           case Some(e1) => Some(typeExpr(e1))
           case None     => None
         }
         val actual = e.map(_.typ).getOrElse(VoidType)
-        if (actual.noError && !ctx.currentScope.isLambda && !(actual <= expected))
-          issue(new BadReturnTypeError(expected, actual, stmt.pos))
-        (Return(e), e match {
-            case Some(e1) => e1.typ
-            case None => NoType
-        })
+        if (!ctx.currentScope.isLambda) {
+            val expected = ctx.currentMethod.typ.ret
+            if (actual.noError && !(actual <= expected))
+            issue(new BadReturnTypeError(expected, actual, stmt.pos))
+        }
+        (Return(e), actual)
 
       case Print(exprs) =>
         val es = exprs.zipWithIndex.map {
@@ -420,12 +418,8 @@ class Typer(implicit config: Config)
                 }
             }
           case None =>
-            ctx.lookupBefore(method, initializedID match {
-                case Some(identifier) if identifier == method =>
-                    correctBeforePos.getOrElse(method.pos)
-                case _ => method.pos
-            }) match {
-                case Some(sym) => sym match {
+            ctx.lookupBefore(method, method.pos) match {
+                case Some(sym) if !initVars.contains(sym.name) => sym match {
                     case v: LocalVarSymbol =>
                         v.typ match {
                             case FunType(typArgs, ret) =>
@@ -476,7 +470,7 @@ class Typer(implicit config: Config)
                     case _ =>
                         issue(new UndeclVarError(method, method.pos)); err
                 }
-                case None => issue(new UndeclVarError(method, method.pos)); err
+                case _ => issue(new UndeclVarError(method, method.pos)); err
             }
           case Some(t) =>
             issue(new NotClassFieldError(method, t, method.pos)); err
@@ -574,12 +568,8 @@ class Typer(implicit config: Config)
 
         // Be careful we may be inside the initializer, if so, load the correct "before position".
         // TODO: [[if identifier != id]]
-        ctx.lookupBefore(id, initializedID match {
-            case Some(identifier) if identifier == id =>
-                correctBeforePos.getOrElse(id.pos)
-            case _ => id.pos
-        }) match {
-          case Some(sym) =>
+        ctx.lookupBefore(id, id.pos) match {
+          case Some(sym) if !initVars.contains(sym.name) =>
             sym match {
               case v: LocalVarSymbol =>
                 LocalVar(v)(v.typ)
@@ -612,7 +602,7 @@ class Typer(implicit config: Config)
 
                 issue(new UndeclVarError(id, expr.pos)); err
             }
-          case None =>
+          case _ =>
             // printf("VarSel fail to find " + id.name + ".\n")
 
             issue(new UndeclVarError(id, expr.pos)); err
@@ -681,8 +671,7 @@ class Typer(implicit config: Config)
     typed.setPos(expr.pos)
   }
 
-  private var correctBeforePos: Option[Pos] = None
-  private var initializedID: Option[String] = None
+  private val initVars: mutable.TreeSet[String] = new mutable.TreeSet
 
   private def compatible(op: Op, operand: Type): Boolean = op match {
     case NEG => operand === IntType // if e : int, then -e : int

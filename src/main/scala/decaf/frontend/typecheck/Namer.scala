@@ -5,6 +5,7 @@ import decaf.driver.{Config, Phase}
 import decaf.frontend.annot.SymbolImplicit._
 import decaf.frontend.annot.TypeImplicit._
 import decaf.frontend.annot._
+import decaf.frontend.parsing._
 import decaf.frontend.tree.SyntaxTree._
 import decaf.frontend.tree.TreeNode._
 import decaf.frontend.tree.{TypedTree => Typed}
@@ -388,6 +389,8 @@ class Namer(implicit config: Config)
   def resolveExpr(expr: Expr)(implicit ctx: ScopeContext): Typed.Expr = {
     val err = Typed.ErrorSynExpr(expr)
 
+    printf(s"At ${expr.pos}, resolveExpr $expr\n")
+
     val resolved = expr match {
         case e: LValue => resolveLValue(e)
 
@@ -454,19 +457,14 @@ class Namer(implicit config: Config)
   }
 
   def resolveStmt(stmt: Stmt)(implicit ctx: ScopeContext): Typed.Stmt = {
+    printf(s"At ${stmt.pos}, resolveStmt $stmt\n")
+
     val resolved = stmt match {
       case block: Block     => resolveBlock(block)
-      case v: LocalVarDef   =>
-        val init = v.init.map(resolveExpr)
-        resolveLocalVarDef(v) match {
-            case Some(lv) => Typed.LocalVarDef(
-                lv.typeLit,
-                lv.id,
-                init,
-                lv.assignPos
-            )(lv.symbol)
-            case None => Typed.Skip()
-        }
+      case v: LocalVarDef   => resolveLocalVarDef(v) match {
+        case Some(lv) => lv
+        case None => Typed.Skip()
+      }
       case Assign(lhs, rhs) => Typed.Assign(resolveLValue(lhs), resolveExpr(rhs))
       case ExprEval(expr)   => Typed.ExprEval(resolveExpr(expr))
       case Skip()           => Typed.Skip()
@@ -501,11 +499,17 @@ class Namer(implicit config: Config)
       implicit ctx: ScopeContext,
       isParam: Boolean = false
   ): Option[Typed.LocalVarDef] = {
-    ctx.findConflictBefore(v.name, v.pos) match {
-      case Some(earlier) =>
+    printf(s"resolveLocalVarDef $v\n")
+    printf(s"initVars = $initVars\n")
+
+    (ctx.findConflictBefore(v.name, v.pos) match {
+        case Some(earlier) => Some(earlier.pos)
+        case None => initVars.get(v.name)
+    }) match {
+      case Some(earlierPos) =>
         // printf(s"At ${v.pos}, DeclConflictError occurs when resolving LocalVarDef\n")
 
-        issue(new DeclConflictError(v.name, earlier.pos, v.pos))
+        issue(new DeclConflictError(v.name, earlierPos, v.pos))
         // NOTE: when type check a method, even though this parameter is conflicting, we still need to know what is the
         // type. Suppose this type is ok, we can still construct the full method type signature, to the user's
         // expectation.
@@ -515,16 +519,18 @@ class Namer(implicit config: Config)
             Typed.LocalVarDef(
               typedTypeLit,
               v.id,
-              v.init.map(resolveExpr),
+              v.init.map(resolveExpr), // In fact, [[v.init]] must be [[None]] for a parameter. ResolveExpr for corret type.
               v.assignPos
             )(null)
           )
         } else {
-          // Remain lambda, but do not to declare
-          // Append the id with a random string for convenience
-          None
+            v.init.map(resolveExpr)
+            None
         }
-      case None =>
+        case None =>
+        initVars(v.name) = v.pos
+        val init = v.init.map(resolveExpr)
+        initVars -= v.name
         // printf(s"At ${v.pos}, here's no conflict with ${v.name}!\n")
 
         val typedTypeLit = typeTypeLit(v.typeLit)
@@ -550,11 +556,13 @@ class Namer(implicit config: Config)
               Typed.LocalVarDef(
                 typedTypeLit,
                 v.id,
-                v.init.map(resolveExpr),
+                init,
                 v.assignPos
               )(symbol)
             )
         }
     }
   }
+
+  private val initVars: mutable.TreeMap[String, Pos] = new mutable.TreeMap
 }
