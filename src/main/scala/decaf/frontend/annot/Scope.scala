@@ -104,7 +104,7 @@ sealed trait Scope extends Annot {
   /**
     * Actual symbol table: maps names to their symbols.
     */
-  protected var symbols: mutable.Map[String, Item] = new mutable.TreeMap
+  var symbols: mutable.Map[String, Item] = new mutable.TreeMap
 }
 
 /**

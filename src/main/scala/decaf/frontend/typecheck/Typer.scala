@@ -141,32 +141,37 @@ class Typer(implicit config: Config)
             val typeInitExpr = typeExpr(initExpr)
             initVars -= v.name
 
-            val declTypeLit = v.typeLit match {
+            var declTypeLit = v.typeLit match {
               case TVar() =>
                 // printf(s"Auto inference: type = ${r.typ}\n")
 
-                val t = fromTypeToTypeLit(typeInitExpr.typ)
                 typeInitExpr.typ match {
                   case VoidType =>
-                    issue(new DeclVoidTypeError(v.id.name, v.pos))
-                  case _ =>
+                    issue(new DeclVoidTypeError(v.name, v.pos))
+                    TError()
+                  case t => fromTypeToTypeLit(t)
                 }
-                t
               case t => t
             }
             if (!(typeInitExpr.typ <= declTypeLit.typ)) {
               issue(
                 new IncompatBinOpError("=", declTypeLit.typ, typeInitExpr.typ, v.assignPos)
               )
-            } else
-              ctx.declare(new LocalVarSymbol(v, declTypeLit.typ))
-            (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(v.symbol), EmptyType, false)
+              declTypeLit = TError()
+            }
+            val symbol = new LocalVarSymbol(v, declTypeLit.typ)
+            ctx.declare(symbol)
+            (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(symbol), EmptyType, false)
           case None =>
             v.typeLit match {
-              case TVar() => issue(new DeclVoidTypeError(v.id.name, v.pos))
-              case _      => ;
+              case TVar() =>
+                issue(new DeclVoidTypeError(v.name, v.pos))
+                
+                val symbol = new LocalVarSymbol(v, NoType)
+                ctx.declare(symbol)
+                (LocalVarDef(TError(), v.id, None)(symbol), EmptyType, false)
+              case _      => (v, EmptyType, false);
             }
-            (v, EmptyType, false)
         }
 
       case Assign(lhs, rhs) =>
@@ -423,7 +428,8 @@ class Typer(implicit config: Config)
             assert(r.isDefined)
             if (args.nonEmpty)
               issue(new BadLengthArgError(args.length, expr.pos))
-            ArrayLen(r.get)(IntType)
+            ArrayLenCall(r.get)(IntType)
+
           case Some(t @ ClassType(c, _)) =>
             ctx.global(c).scope.lookup(method) match {
               case Some(sym) =>
@@ -659,6 +665,12 @@ class Typer(implicit config: Config)
         val r = typeExpr(receiver)
         r.typ match {
           case NoType => err
+          case Some(_: ArrayType)
+              if id.name == "length" => // Special case: array.length
+            assert(r.isDefined)
+            if (args.nonEmpty)
+              issue(new BadLengthArgError(args.length, expr.pos))
+            ArrayLen(r.get)(FunType(List(IntType), r.typ))
           case t @ ClassType(c, _) =>
             ctx.global(c).scope.lookup(id) match {
               case Some(sym) =>

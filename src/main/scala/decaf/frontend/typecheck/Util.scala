@@ -97,18 +97,12 @@ trait Util extends ErrorIssuer {
           case (EmptyType, t2) => t2
           case (t1, EmptyType) => t1
           case _ =>
-            var t1: Type = NoType
-            var t2: Type = NoType
-            if (t1 == NullType) {
-                t1 = _t2
-                t2 = _t1
-            }
-            else {
-                t1 = _t1
-                t2 = _t2
-            }
+            val (t1, t2) = if (_t1 == NullType) (_t2, _t1) else (_t1, _t2)
             if (t2 <= t1) t1
+            else if (t1 <= t2) t2
             else {
+                printf(s"typeUpperBound2: _t1 = ${_t1}, _t2 = ${_t2}, t1 = $t1, t2 = $t2\n")
+
                 t1 match {
                     case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) => NoType
                     case ClassType(_, Some(p)) => typeUpperBound2(p, t2)
@@ -130,17 +124,9 @@ trait Util extends ErrorIssuer {
       if (_t1 == NoType || _t2 == NoType) NoType
       else if (_t1 == NullType && _t2 == NullType) NullType
       else {
-        var t1: Type = NoType
-        var t2: Type = NoType
-        if (t1 == NullType) {
-            t1 = _t2
-            t2 = _t1
-        }
-        else {
-            t1 = _t1
-            t2 = _t2
-        }
+        val (t1, t2) = if (_t1 == NullType) (_t2, _t1) else (_t1, _t2)
         if (t1 <= t2) t1
+        else if (t2 <= t1) t2
         else {
             t1 match {
                 case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) => NoType

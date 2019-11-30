@@ -46,6 +46,10 @@ object TypedTree extends TreeTmpl {
       implicit val annot: ExprAnnot
   ) extends LValue
 
+  case class ArrayLen(array: Expr)(
+      implicit val annot: ExprAnnot
+  ) extends LValue
+
   case class StaticMethod(owner: ClassSymbol, variable: MethodSymbol)(
       implicit val annot: ExprAnnot
   ) extends LValue
@@ -76,7 +80,7 @@ object TypedTree extends TreeTmpl {
     *
     * @param array an expression evaluates to an array
     */
-  case class ArrayLen(array: Expr)(implicit val annot: ExprAnnot) extends Expr
+  case class ArrayLenCall(array: Expr)(implicit val annot: ExprAnnot) extends Expr
 
   /**
     * Calling a function. Derives from [[SyntaxTree.Call]].
