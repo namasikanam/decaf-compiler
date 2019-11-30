@@ -91,33 +91,35 @@ trait Util extends ErrorIssuer {
   def typeUpperBound(tl: List[Type]): Type = tl.reduce(typeUpperBound2)
 
   def typeUpperBound2(_t1: Type, _t2: Type): Type = {
-      if (_t1 == NoType || _t2 == NoType) NoType
-      else if (_t1 == NullType && _t2 == NullType) NullType
-      else {
-        var t1: Type = NoType
-        var t2: Type = NoType
-        if (t1 == NullType) {
-            t1 = _t2
-            t2 = _t1
-        }
-        else {
-            t1 = _t1
-            t2 = _t2
-        }
-        if (t2 <= t1) t1
-        else {
-            t1 match {
-                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) | NoType =>
-                    issue(new TypeIncompError(t1, t2)); NoType
-                case ClassType(_, Some(p)) => typeUpperBound2(p, t2)
-                case FunType(args1, ret1) => t2 match {
-                    case FunType(args2, ret2) if args1.length == args2.length =>
-                        FunType((args1 zip args2).map(x => typeUpperBound2(x._1, x._2)), typeLowerBound2(ret1, ret2))
-                    case _ => issue(new TypeIncompError(t1, t2)); NoType
+      (_t1, _t2) match {
+          case (NoType, _) | (_, NoType) => NoType
+          case (NullType, NullType) => NullType
+          case (EmptyType, t2) => t2
+          case (t1, EmptyType) => t1
+          case _ =>
+            var t1: Type = NoType
+            var t2: Type = NoType
+            if (t1 == NullType) {
+                t1 = _t2
+                t2 = _t1
+            }
+            else {
+                t1 = _t1
+                t2 = _t2
+            }
+            if (t2 <= t1) t1
+            else {
+                t1 match {
+                    case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) => NoType
+                    case ClassType(_, Some(p)) => typeUpperBound2(p, t2)
+                    case FunType(args1, ret1) => t2 match {
+                        case FunType(args2, ret2) if args1.length == args2.length =>
+                            FunType((args1 zip args2).map(x => typeUpperBound2(x._1, x._2)), typeLowerBound2(ret1, ret2))
+                        case _ => NoType
+                    }
                 }
             }
-        }
-      }
+    }
   }
   
   def typeLowerBound(tl: List[Type]): Type = tl.reduce(typeLowerBound2)
@@ -139,13 +141,12 @@ trait Util extends ErrorIssuer {
         if (t1 <= t2) t1
         else {
             t1 match {
-                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) | NoType =>
-                    issue(new TypeIncompError(t1, t2)); NoType
+                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) => NoType
                 case ClassType(_, Some(p)) => typeLowerBound2(p, t2)
                 case FunType(args1, ret1) => t2 match {
                     case FunType(args2, ret2) if args1.length == args2.length =>
                         FunType((args1 zip args2).map(x => typeLowerBound2(x._1, x._2)), typeUpperBound2(ret1, ret2))
-                    case _ => issue(new TypeIncompError(t1, t2)); NoType
+                    case _ => NoType
                 }
             }
         }

@@ -76,7 +76,10 @@ class PrettyScope(printer: IndentPrinter)
         if (s.isEmpty) {
           printer.println("<empty>")
         } else {
-          s.values.foreach{symbol => printer.println(symbol.toString)}
+          s.values.foreach{symbol =>
+            printer.println(symbol.toString)
+          }
+        }
         s.nestedScopes.foreach(pretty)
       }
   }

@@ -50,13 +50,18 @@ class Typer(implicit config: Config)
 
             // printf(s"Check method $m\n")
 
-            val (checkedBody, blockReturnType) = checkBlock(body)(formalCtx)
+            val (checkedBody, blockReturnType, blockReturns) = checkBlock(body)(formalCtx)
 
             // printf(s"After check the block of the method, blockReturnType = $blockReturnType\n")
 
-            // Check if the body always returns a value, when the method is non-void
-            if (!m.isAbstract && !methodReturnTypeLit.typ.isVoidType && (!blockReturnType.noError || blockReturnType.isVoidType))
-              issue(new MissingReturnError(checkedBody.pos))
+            // Only non-abstract method needs error checking
+            if (!m.isAbstract) {
+                // Check if the body always returns a value, when the method is non-void
+                if (!methodReturnTypeLit.typ.isVoidType && !blockReturns) 
+                    issue(new MissingReturnError(body.pos))
+                if (blockReturnType == NoType)
+                    issue(new TypeIncompError(body.pos))
+            }
 
             MethodDef(mod, id, methodReturnTypeLit, params, checkedBody)(m.symbol)
               .setPos(m.pos)
@@ -86,28 +91,26 @@ class Typer(implicit config: Config)
     * @param block      statement block
     * @param ctx        scope context
     * @param insideLoop are we inside a loop? This exists for check stmt [[Break]].
-    * @return a pair: the typed block, and a boolean indicating if this block returns a value
+    * @return a 3-tuple: the typed block, return type, and a boolean indicating if this block returns a value
     */
   def checkBlock(block: Block)(
       implicit ctx: ScopeContext,
       insideLoop: Boolean = false
-  ): (Block, Type) = {
+  ): (Block, Type, Boolean) = {
     val localCtx = ctx.open(block.scope)
 
     printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
 
     val ss = block.stmts.map { checkStmt(_)(localCtx, insideLoop) }
     // Find the last [[stmt]] who has a correct return type
-    val returnTypes = ss.filter(
-        _._2 != NoType
-    ).map(_._2)
+    val returnTypes = ss.filter(_._2 != EmptyType).map(_._2)
     val returnType = returnTypes.length match {
-        case 0 => VoidType
+        case 0 => EmptyType
         case 1 => returnTypes.head
         case _ => returnTypes.reduce(typeUpperBound2)
     }
-
-    (Block(ss.map(_._1))(block.scope).setPos(block.pos), returnType)
+    
+    (Block(ss.map(_._1))(block.scope).setPos(block.pos), returnType, !ss.filter(_._3).isEmpty)
   }
 
   /**
@@ -116,11 +119,11 @@ class Typer(implicit config: Config)
     * @param stmt       statement
     * @param ctx        scope context
     * @param insideLoop are we inside a loop?
-    * @return a pair: the typed statement, and a boolean indicating if this statement returns a value
+    * @return a 3-tuple: the typed statement, the type returned and a boolean indicating if this statement returns a value
     */
   def checkStmt(
       stmt: Stmt
-  )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type) = {
+  )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type, Boolean) = {
     printf(s"At ${stmt.pos}, checkStmt $stmt\n")
 
     val checked = stmt match {
@@ -157,13 +160,13 @@ class Typer(implicit config: Config)
               )
             } else
               ctx.declare(new LocalVarSymbol(v, declTypeLit.typ))
-            (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(v.symbol), NoType)
+            (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(v.symbol), EmptyType, false)
           case None =>
             v.typeLit match {
               case TVar() => issue(new DeclVoidTypeError(v.id.name, v.pos))
               case _      => ;
             }
-            (v, NoType)
+            (v, EmptyType, false)
         }
 
       case Assign(lhs, rhs) =>
@@ -187,40 +190,53 @@ class Typer(implicit config: Config)
             issue(new IncompatBinOpError("=", l.typ, r.typ, stmt.pos))
           case _ => // do nothing
         }
-        (Assign(l, r), NoType)
+        (Assign(l, r), EmptyType, false)
 
       case ExprEval(expr) =>
         val e = typeExpr(expr)
-        (ExprEval(e), NoType)
+        (ExprEval(e), EmptyType, false)
 
-      case Skip() => (Skip(), NoType)
+      case Skip() => (Skip(), EmptyType, false)
 
       case If(cond, trueBranch, falseBranch) =>
         val c = checkTestExpr(cond)
-        val (t, trueReturnType) = checkBlock(trueBranch)
-        val f = falseBranch.map(checkBlock)
-        // if-stmt returns a value if both branches return
-        val returns = typeUpperBound2(trueReturnType, f.getOrElse((NoType, NoType))._2)
-        (If(c, t, f.map(_._1)), returns)
+        val (t, trueReturnType, trueReturns) = checkBlock(trueBranch)
+        val (f, rt, r) = falseBranch.map(checkBlock) match {
+            case Some((fb, falseBranchType, falseReturns)) =>
+                printf(s"At ${stmt.pos}, the 'If stmt' has two branches, trueReturns = $trueReturns, falseReturns = $falseReturns\n")
+
+                (Some(fb), typeUpperBound2(trueReturnType, falseBranchType), trueReturns && falseReturns)
+            case None => (None, trueReturnType, false)
+        }
+
+        printf(s"At ${stmt.pos}, An 'If stmt' returns = $r\n")
+
+        (If(c, t, f), rt, r)
 
       case While(cond, body) =>
         val c = checkTestExpr(cond)
-        val (b, _) = checkBlock(body)(ctx, insideLoop = true)
-        (While(c, b), NoType)
+        val (b, rt, _) = checkBlock(body)(ctx, insideLoop = true)
+        (While(c, b), rt, false)
 
       case For(init, cond, update, body) =>
         // Since `init` and `update` may declare local variables, remember to first open the local scope of `body`.
         val local = ctx.open(body.scope)
-        val (i, _) = checkStmt(init)(local, insideLoop)
+        val (i, crt, cr) = checkStmt(init)(local, insideLoop)
         val c = checkTestExpr(cond)(local)
-        val (u, _) = checkStmt(update)(local, insideLoop)
+        val (u, urt, _) = checkStmt(update)(local, insideLoop)
         val ss = body.stmts.map { checkStmt(_)(local, insideLoop = true) }
+        val bodyReturnTypes = ss.filter(_._2 != EmptyType).map(_._2)
+        val (bodyReturnType, returns) = bodyReturnTypes.length match {
+            case 0 => (EmptyType, false)
+            case 1 => (bodyReturnTypes.head, true)
+            case _ => (bodyReturnTypes.reduce(typeUpperBound2 _), true)
+        }
         val b = Block(ss.map(_._1))(body.scope)
-        (For(i, c, u, b), NoType)
+        (For(i, c, u, b), typeUpperBound(List(crt, urt, bodyReturnType)), cr)
 
       case Break() =>
         if (!insideLoop) issue(new BreakOutOfLoopError(stmt.pos))
-        (Break(), NoType)
+        (Break(), EmptyType, false)
 
       case Return(expr) =>
         val e = expr match {
@@ -229,15 +245,15 @@ class Typer(implicit config: Config)
         }
         val actual = e.map(_.typ).getOrElse(VoidType)
         if (!ctx.currentScope.isLambda) {
-            printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
-            printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
-            printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
+            // printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
+            // printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
+            // printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
 
             val expected = ctx.currentMethod.typ.ret
             if (actual.noError && !(actual <= expected))
             issue(new BadReturnTypeError(expected, actual, stmt.pos))
         }
-        (Return(e), actual)
+        (Return(e), actual, true)
 
       case Print(exprs) =>
         val es = exprs.zipWithIndex.map {
@@ -247,11 +263,11 @@ class Typer(implicit config: Config)
               issue(new BadPrintArgError(i + 1, e.typ, expr.pos))
             e
         }
-        (Print(es), NoType)
+        (Print(es), EmptyType, false)
     }
 
     checked match {
-      case (s, r) => (s.setPos(stmt.pos), r)
+      case (s, rt, r) => (s.setPos(stmt.pos), rt, r)
     }
   }
 
@@ -326,12 +342,21 @@ class Typer(implicit config: Config)
         val re = typeExpr(retExpr)(lctx)
         val typ = FunType(params.map(_.typeLit.typ), re.typ)
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
+
+        printf(s"At ${expr.pos}, Type ExpressionLambda: typ = ${typ}\n")
+
         ExpressionLambda(params, re, scope)(typ)
 
       case BlockLambda(params, block, scope) =>
         val fctx = ctx.open(scope)
         val lctx = fctx.open(scope.nestedScope)
-        val (b, retTyp) = checkBlock(block)(lctx)
+        var (b, retTyp, returns) = checkBlock(block)(lctx)
+
+        printf(s"At ${expr.pos}, Type BlockLambda (retTyp = $retTyp, returns = $returns)\n")
+
+        if (retTyp == NoType) issue(new TypeIncompError(block.pos))
+        if (retTyp == EmptyType) retTyp = VoidType
+        if (!retTyp.isVoidType && !returns) issue(new MissingReturnError(block.pos))
         val typ = FunType(params.map(_.typeLit.typ), retTyp)
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
         BlockLambda(params, b, scope)(typ)

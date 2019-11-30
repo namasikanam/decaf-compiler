@@ -230,6 +230,21 @@ object NoType extends Type {
   override def toString: String = "Error"
 }
 
+/**
+ * Representing an empty type without any returns of stmt.
+ * This shouldn't occur in anywhere else.
+ * 
+ * TODO: for lambda scope, if [[EmptyType]] is returned, then the return type of the lambda function is [[VoidType]].
+ */
+object EmptyType extends Type {
+
+    override def <=(that: Type): Boolean = true
+
+    override def noError: Boolean = false
+
+    override def toString: String = "Error"
+}
+
 object TypeImplicit {
 
   implicit class TypeAnnotatedHasType(self: Annotated[Type]) {

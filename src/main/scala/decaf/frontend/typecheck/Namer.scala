@@ -370,12 +370,11 @@ class Namer(implicit config: Config)
     ctx.currentScope match {
       case s: FormalScope =>
         s.nestedScope = localScope
-      case s: LambdaScope =>
-        localScope.lambdaFlag = true
-        s.nestedScopes += localScope
       case s: LocalScope =>
         s.nestedScopes += localScope
     }
+    localScope.lambdaFlag = ctx.currentScope.lambdaFlag
+
     val localCtx = ctx.open(localScope)
     val ss = block.stmts.map { resolveStmt(_)(localCtx) }
     Typed.Block(ss)(localScope).setPos(block.pos)
@@ -486,7 +485,13 @@ class Namer(implicit config: Config)
         // Since `init` and `update` may declare local variables, we must first open the local scope of `body`, and
         // then resolve `init`, `update` and statements inside `body`.
         val localScope = new LocalScope
-        ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += localScope
+        ctx.currentScope match {
+        case s: LambdaScope =>
+            localScope.lambdaFlag = true
+            s.nestedScopes += localScope
+        case s: LocalScope =>
+            s.nestedScopes += localScope
+        }
         val localCtx = ctx.open(localScope)
         val i = resolveStmt(init)(localCtx)
         val c = resolveExpr(cond)(localCtx)
