@@ -114,7 +114,9 @@ trait Util extends ErrorIssuer {
                     case ClassType(_, Some(p)) => typeUpperBound2(p, t2)
                     case FunType(args1, ret1) => t2 match {
                         case FunType(args2, ret2) if args1.length == args2.length =>
-                            FunType((args1 zip args2).map(x => typeUpperBound2(x._1, x._2)), typeLowerBound2(ret1, ret2))
+                        val t = FunType((args1 zip args2).map(x => typeLowerBound2(x._1, x._2)), typeUpperBound2(ret1, ret2))
+                        if (!t.args.filter(_ == NoType).isEmpty || t.ret == NoType) NoType
+                        else t
                         case _ => NoType
                     }
                 }
@@ -145,7 +147,9 @@ trait Util extends ErrorIssuer {
                 case ClassType(_, Some(p)) => typeLowerBound2(p, t2)
                 case FunType(args1, ret1) => t2 match {
                     case FunType(args2, ret2) if args1.length == args2.length =>
-                        FunType((args1 zip args2).map(x => typeLowerBound2(x._1, x._2)), typeUpperBound2(ret1, ret2))
+                        val t = FunType((args1 zip args2).map(x => typeUpperBound2(x._1, x._2)), typeLowerBound2(ret1, ret2))
+                        if (!t.args.filter(_ == NoType).isEmpty || t.ret == NoType) NoType
+                        else t
                     case _ => NoType
                 }
             }

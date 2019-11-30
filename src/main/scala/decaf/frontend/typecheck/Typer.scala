@@ -203,13 +203,13 @@ class Typer(implicit config: Config)
         val (t, trueReturnType, trueReturns) = checkBlock(trueBranch)
         val (f, rt, r) = falseBranch.map(checkBlock) match {
             case Some((fb, falseBranchType, falseReturns)) =>
-                printf(s"At ${stmt.pos}, the 'If stmt' has two branches, trueReturns = $trueReturns, falseReturns = $falseReturns\n")
+                // printf(s"At ${stmt.pos}, the 'If stmt' has two branches, trueReturns = $trueReturns, falseReturns = $falseReturns\n")
 
                 (Some(fb), typeUpperBound2(trueReturnType, falseBranchType), trueReturns && falseReturns)
             case None => (None, trueReturnType, false)
         }
 
-        printf(s"At ${stmt.pos}, An 'If stmt' returns = $r\n")
+        printf(s"At ${stmt.pos}, An 'If stmt', returnType = ${rt}, returns = $r\n")
 
         (If(c, t, f), rt, r)
 
