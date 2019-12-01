@@ -38,7 +38,7 @@ object TypedTree extends TreeTmpl {
     * @param receiver target instance
     * @param variable the symbol of the member definition it refers to
     */
-  case class MemberVar(receiver: Expr, variable: MemberVarSymbol)(
+  case class MemberVar(variable: MemberVarSymbol)(
       implicit val annot: ExprAnnot
   ) extends LValue
 

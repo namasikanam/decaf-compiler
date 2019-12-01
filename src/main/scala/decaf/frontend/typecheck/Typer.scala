@@ -99,7 +99,7 @@ class Typer(implicit config: Config)
   ): (Block, Type, Boolean) = {
     val localCtx = ctx.open(block.scope)
 
-    printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
+    // printf(s"At ${block.pos}, checkBlock, now localCtx.currentMethod = ${localCtx.currentMethod}\n")
 
     val ss = block.stmts.map { checkStmt(_)(localCtx, insideLoop) }
     // Find the last [[stmt]] who has a correct return type
@@ -124,7 +124,7 @@ class Typer(implicit config: Config)
   def checkStmt(
       stmt: Stmt
   )(implicit ctx: ScopeContext, insideLoop: Boolean): (Stmt, Type, Boolean) = {
-    printf(s"At ${stmt.pos}, checkStmt $stmt\n")
+    // printf(s"At ${stmt.pos}, checkStmt $stmt\n")
 
     val checked = stmt match {
       case block: Block => checkBlock(block)
@@ -159,6 +159,9 @@ class Typer(implicit config: Config)
               )
               declTypeLit = TError()
             }
+
+            // printf(s"At ${stmt.pos}, LocalVarDef declTypeLit.typ = ${declTypeLit.typ}\n")
+
             val symbol = new LocalVarSymbol(v, declTypeLit.typ)
             ctx.declare(symbol)
             (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(symbol), EmptyType, false)
@@ -214,7 +217,7 @@ class Typer(implicit config: Config)
             case None => (None, trueReturnType, false)
         }
 
-        printf(s"At ${stmt.pos}, An 'If stmt', returnType = ${rt}, returns = $r\n")
+        // printf(s"At ${stmt.pos}, An 'If stmt', returnType = ${rt}, returns = $r\n")
 
         (If(c, t, f), rt, r)
 
@@ -348,7 +351,7 @@ class Typer(implicit config: Config)
         val typ = FunType(params.map(_.typeLit.typ), re.typ)
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
 
-        printf(s"At ${expr.pos}, Type ExpressionLambda: typ = ${typ}\n")
+        // printf(s"At ${expr.pos}, Type ExpressionLambda: typ = ${typ}\n")
 
         ExpressionLambda(params, re, scope)(typ)
 
@@ -357,12 +360,15 @@ class Typer(implicit config: Config)
         val lctx = fctx.open(scope.nestedScope)
         var (b, retTyp, returns) = checkBlock(block)(lctx)
 
-        printf(s"At ${expr.pos}, Type BlockLambda (retTyp = $retTyp, returns = $returns)\n")
-
-        if (retTyp == NoType) issue(new TypeIncompError(block.pos))
         if (retTyp == EmptyType) retTyp = VoidType
+        
+        var typ = FunType(params.map(_.typeLit.typ), retTyp)
+
+        // printf(s"At ${expr.pos}, Type BlockLambda (retTyp = $retTyp, returns = $returns)\n")
+
         if (!retTyp.isVoidType && !returns) issue(new MissingReturnError(block.pos))
-        val typ = FunType(params.map(_.typeLit.typ), retTyp)
+        if (retTyp == NoType) issue(new TypeIncompError(block.pos))
+
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
         BlockLambda(params, b, scope)(typ)
 
@@ -450,7 +456,8 @@ class Typer(implicit config: Config)
             }
           case None =>
             ctx.lookupBefore(method, method.pos) match {
-                case Some(sym) if !initVars.contains(sym.name) => sym match {
+                case Some(sym) if !initVars.contains(sym.name) =>
+                    sym match {
                     case v: LocalVarSymbol =>
                         v.typ match {
                             case FunType(typArgs, ret) =>
@@ -466,6 +473,27 @@ class Typer(implicit config: Config)
                                     e
                                 }
                                 FunctionCall(LocalVar(v)(v.typ), as)(ret)
+                            case NoType => err
+                            case _ =>
+                                issue(new CallUncallableError(v.typ, expr.pos))
+                                err
+                        }
+                    case v: MemberVarSymbol =>
+                        v.typ match {
+                            case FunType(typArgs, ret) =>
+                                if (typArgs.length != args.length) {
+                                    issue(new BadArgCountError(v.name, typArgs.length, args.length, expr.pos))
+                                }
+                                val as = (typArgs zip args).zipWithIndex.map {
+                                    case ((t, a), i) =>
+                                    val e = typeExpr(a)
+                                    if (e.typ.noError && !(e.typ <= t)) {
+                                        issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                                    }
+                                    e
+                                }
+                                // TODO: fix this cheat……
+                                FunctionCall(MemberVar(v)(v.typ), as)(ret)
                             case NoType => err
                             case _ =>
                                 issue(new CallUncallableError(v.typ, expr.pos))
@@ -516,7 +544,7 @@ class Typer(implicit config: Config)
             if (typArgs.length != args.length) {
                 issue(new LambdaBadArgCountError(typArgs.length, args.length, expr.pos))
             }
-            val as = (typArgs zip args).zipWithIndex.map {
+            var as = (typArgs zip args).zipWithIndex.map {
                 case ((t, a), i) =>
                 val e = typeExpr(a)
                 if (e.typ.noError && !(e.typ <= t)) {
@@ -615,7 +643,7 @@ class Typer(implicit config: Config)
                       )
                     )
                   }
-                MemberVar(This(), v)(v.typ)
+                MemberVar(v)(v.typ)
               case m: MethodSymbol =>
                 if (ctx.currentMethod.isStatic && !m.isStatic) // member vars cannot be accessed in a static method
                 {
@@ -665,12 +693,9 @@ class Typer(implicit config: Config)
         val r = typeExpr(receiver)
         r.typ match {
           case NoType => err
-          case Some(_: ArrayType)
+          case ArrayType(elemType)
               if id.name == "length" => // Special case: array.length
-            assert(r.isDefined)
-            if (args.nonEmpty)
-              issue(new BadLengthArgError(args.length, expr.pos))
-            ArrayLen(r.get)(FunType(List(IntType), r.typ))
+            ArrayLen(r)(FunType(List(), elemType))
           case t @ ClassType(c, _) =>
             ctx.global(c).scope.lookup(id) match {
               case Some(sym) =>
@@ -680,7 +705,7 @@ class Typer(implicit config: Config)
                       {
                         issue(new FieldNotAccessError(id, t, expr.pos))
                       }
-                    MemberVar(r, v)(v.typ)
+                    MemberVar(v)(v.typ)
                   case m: MethodSymbol =>
                     if (m.isStatic) { // TODO: Some unkown issue should occur here
                     }

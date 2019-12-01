@@ -52,10 +52,10 @@ trait TacEmitter {
         val addr = emitArrayElementAddress(at, it)
         val t = emitExpr(rhs)
         fv.visitStoreTo(addr, t)
-      case Assign(MemberVar(receiver, v), rhs) =>
-        val rt = emitExpr(receiver)
-        val t = emitExpr(rhs)
-        fv.visitMemberWrite(rt, v.owner.name, v.name, t)
+    //   case Assign(MemberVar(receiver, v), rhs) =>
+    //     val rt = emitExpr(receiver)
+    //     val t = emitExpr(rhs)
+    //     fv.visitMemberWrite(rt, v.owner.name, v.name, t)
       case Assign(LocalVar(v), rhs) =>
         val t = emitExpr(rhs)
         fv.visitAssign(ctx.vars(v), t)
@@ -175,9 +175,9 @@ trait TacEmitter {
 
       case NewClass(clazz) => fv.visitNewClass(clazz.name)
       case This() => fv.getArgTemp(0)
-      case MemberVar(receiver, field) =>
-        val rt = emitExpr(receiver)
-        fv.visitMemberAccess(rt, field.owner.name, field.name)
+    //   case MemberVar(receiver, field) =>
+    //     val rt = emitExpr(receiver)
+    //     fv.visitMemberAccess(rt, field.owner.name, field.name)
 
       case MemberCall(receiver, method, args) =>
         val rt = emitExpr(receiver)

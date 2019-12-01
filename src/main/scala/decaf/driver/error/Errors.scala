@@ -189,7 +189,7 @@ case class LambdaBadArgCountError(expected: Int, actual: Int, override val pos: 
       pos
     )
 
-case class TypeIncompError(override val pos: Pos) extends Error(s"incompatible return types in blocked expression.", pos)
+case class TypeIncompError(override val pos: Pos) extends Error(s"incompatible return types in blocked expression", pos)
 
 case class VoidArgError(override val pos: Pos) extends Error(s"arguments in function type must be non-void known type", pos)
 

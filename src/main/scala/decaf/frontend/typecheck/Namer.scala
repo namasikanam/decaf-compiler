@@ -136,7 +136,7 @@ class Namer(implicit config: Config)
     }
     if (hasError) return Typed.TopLevel(Nil)(ctx.global)
 
-    printf("=======================Namer End===========================\n")
+    // printf("=======================Namer End===========================\n")
 
     Typed.TopLevel(resolvedClasses)(ctx.global).setPos(tree.pos)
   }
@@ -333,6 +333,7 @@ class Namer(implicit config: Config)
             val retType = rt.typ
             var formalScope = new FormalScope
             formalScope.nestedScope = new LocalScope
+
             val formalCtx: ScopeContext = ctx.open(formalScope)
 
             if (!m.isStatic)
@@ -348,7 +349,7 @@ class Namer(implicit config: Config)
             val symbol =
               new MethodSymbol(m, funType, formalScope, ctx.currentClass)
             
-            printf(s"Build MethodSymbol: the ownerMethod of scope of MethodSymbol $symbol is ${symbol.scope.ownerMethod}\n")
+            // printf(s"Build MethodSymbol: the ownerMethod of scope of MethodSymbol $symbol is ${symbol.scope.ownerMethod}\n")
 
             ctx.declare(symbol)
             val block = resolveBlock(body)(formalCtx)
@@ -393,7 +394,7 @@ class Namer(implicit config: Config)
   def resolveExpr(expr: Expr)(implicit ctx: ScopeContext): Typed.Expr = {
     val err = Typed.ErrorSynExpr(expr)
 
-    printf(s"At ${expr.pos}, resolveExpr $expr\n")
+    // printf(s"At ${expr.pos}, resolveExpr $expr\n")
 
     val resolved = expr match {
         case e: LValue => resolveLValue(e)
@@ -465,7 +466,7 @@ class Namer(implicit config: Config)
   }
 
   def resolveStmt(stmt: Stmt)(implicit ctx: ScopeContext): Typed.Stmt = {
-    printf(s"At ${stmt.pos}, resolveStmt $stmt\n")
+    // printf(s"At ${stmt.pos}, resolveStmt $stmt\n")
 
     val resolved = stmt match {
       case block: Block     => resolveBlock(block)
@@ -513,8 +514,8 @@ class Namer(implicit config: Config)
       implicit ctx: ScopeContext,
       isParam: Boolean = false
   ): Option[Typed.LocalVarDef] = {
-    printf(s"resolveLocalVarDef $v\n")
-    printf(s"initVars = $initVars\n")
+    // printf(s"resolveLocalVarDef $v\n")
+    // printf(s"initVars = $initVars\n")
 
     (ctx.findConflictBefore(v.name, v.pos) match {
         case Some(earlier) => Some(earlier.pos)

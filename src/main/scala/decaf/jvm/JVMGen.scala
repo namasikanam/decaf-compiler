@@ -152,10 +152,10 @@ class JVMGen(implicit config: Config) extends Phase[Tree, List[JVMClass]]("jvm",
     case Assign(LocalVar(v), rhs) =>
       emitExpr(rhs)
       mv.visitVarInsn(storeOp(v.typ), ctx.index(v))
-    case Assign(MemberVar(receiver, v), rhs) =>
-      emitExpr(receiver)
-      emitExpr(rhs)
-      mv.visitFieldInsn(Opcodes.PUTFIELD, internalName(v.owner), v.name, descriptor(v))
+    // case Assign(MemberVar(receiver, v), rhs) =>
+    //   emitExpr(receiver)
+    //   emitExpr(rhs)
+    //   mv.visitFieldInsn(Opcodes.PUTFIELD, internalName(v.owner), v.name, descriptor(v))
     case Assign(IndexSel(array, index), rhs) =>
       emitExpr(array)
       emitExpr(index)
@@ -251,9 +251,9 @@ class JVMGen(implicit config: Config) extends Phase[Tree, List[JVMClass]]("jvm",
       mv.visitInsn(Opcodes.DUP)
       mv.visitMethodInsn(Opcodes.INVOKESPECIAL, internalName(clazz), CONSTRUCTOR_NAME, CONSTRUCTOR_DESC, false)
     case This() => mv.visitVarInsn(Opcodes.ALOAD, 0)
-    case MemberVar(receiver, v) =>
-      emitExpr(receiver)
-      mv.visitFieldInsn(Opcodes.GETFIELD, internalName(v.owner), v.name, descriptor(v))
+    // case MemberVar(receiver, v) =>
+    //   emitExpr(receiver)
+    //   mv.visitFieldInsn(Opcodes.GETFIELD, internalName(v.owner), v.name, descriptor(v))
     case StaticCall(m, args) =>
       args foreach emitExpr
       mv.visitMethodInsn(Opcodes.INVOKESTATIC, internalName(m.owner), m.name, descriptor(m), false)

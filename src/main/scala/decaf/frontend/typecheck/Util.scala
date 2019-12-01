@@ -101,7 +101,7 @@ trait Util extends ErrorIssuer {
             if (t2 <= t1) t1
             else if (t1 <= t2) t2
             else {
-                printf(s"typeUpperBound2: _t1 = ${_t1}, _t2 = ${_t2}, t1 = $t1, t2 = $t2\n")
+                // printf(s"typeUpperBound2: _t1 = ${_t1}, _t2 = ${_t2}, t1 = $t1, t2 = $t2\n")
 
                 t1 match {
                     case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) => NoType
@@ -129,8 +129,7 @@ trait Util extends ErrorIssuer {
         else if (t2 <= t1) t2
         else {
             t1 match {
-                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, None) => NoType
-                case ClassType(_, Some(p)) => typeLowerBound2(p, t2)
+                case IntType | StringType | BoolType | VoidType | ArrayType(_) | ClassType(_, _) => NoType
                 case FunType(args1, ret1) => t2 match {
                     case FunType(args2, ret2) if args1.length == args2.length =>
                         val t = FunType((args1 zip args2).map(x => typeUpperBound2(x._1, x._2)), typeLowerBound2(ret1, ret2))

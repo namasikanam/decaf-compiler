@@ -242,8 +242,8 @@ class ScopeContext private (
     * @return a new scope context after opening `scope`
     */
   def open(scope: Scope): ScopeContext = {
-      printf(s"Before open, ownerMethod = ${currentMethod}\n")
-      printf(s"open scope $scope\n")
+    //   printf(s"Before open, ownerMethod = ${currentMethod}\n")
+    //   printf(s"open scope $scope\n")
 
       scope match {
         case s: ClassScope =>
@@ -255,7 +255,7 @@ class ScopeContext private (
         case s: FormalScope =>
         if (s.isLambda) new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
         else {
-            printf(s"open a new method: ${s.ownerMethod}\n")
+            // printf(s"open a new method: ${s.ownerMethod}\n")
 
             new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
         }
@@ -291,7 +291,7 @@ class ScopeContext private (
 
           s.find(key) match {
             case Some(symbol) if p(symbol) =>
-                // printf("Find!\n")
+                // printf(s"Find '$key'!\n")
 
                 Some(symbol)
             case _                         =>
@@ -319,7 +319,7 @@ class ScopeContext private (
     * @return innermost found symbol before `pos` (if any)
     */
   def lookupBefore(key: String, pos: Pos): Option[Symbol] = {
-    printf(s"lookupBefore($key, $pos)\n")
+    // printf(s"lookupBefore($key, $pos)\n")
 
     findWhile(key, _ => true, s => !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos))
   }
