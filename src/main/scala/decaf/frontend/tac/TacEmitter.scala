@@ -164,11 +164,8 @@ trait TacEmitter {
         val lt = emitExpr(lhs)
         val rt = emitExpr(rhs)
 
-        printf(s"opcode=$opcode\n")
         // Check: The dividing number can't be zero
         if (opcode == TacInstr.Binary.Op.DIV || opcode == TacInstr.Binary.Op.MOD) {
-          printf(s"opcode == DIV || opcode == MOD\n")
-
           val zero = fv.visitLoad(0)
           ifThen(fv.visitBinary(TacInstr.Binary.Op.EQU, rt, zero), {
             fv.visitPrint(RuntimeError.DIVISION_BY_ZERO)

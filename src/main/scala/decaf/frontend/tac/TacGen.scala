@@ -11,7 +11,9 @@ import decaf.util.Conversions._
 /**
   * The tacgen phase: translate a typed abstract syntax tree to TAC IR.
   */
-class TacGen(implicit config: Config) extends Phase[Tree, TacProg]("tacgen", config) with TacEmitter {
+class TacGen(implicit config: Config)
+    extends Phase[Tree, TacProg]("tacgen", config)
+    with TacEmitter {
 
   /**
     * Transformer entry.
@@ -34,17 +36,25 @@ class TacGen(implicit config: Config) extends Phase[Tree, TacProg]("tacgen", con
     } yield {
       if (method.symbol.isMain) {
         val fv = pw.visitMainMethod
-        emitStmt(method.body)(new Context, Nil, fv)
+
+        if (!method.isAbstract) {
+          emitStmt(method.body)(new Context, Nil, fv)
+        }
+
         fv.visitEnd()
       } else {
         val base = if (method.isStatic) 0 else 1 // arg 0 is reserved for `this`, when this is a member method
-        val fv = pw.visitFunc(clazz.name, method.name, base + method.params.length)
+        val fv =
+          pw.visitFunc(clazz.name, method.name, base + method.params.length)
         val ctx = new Context
         method.params.zipWithIndex.foreach {
           case (p, i) => ctx.vars(p.symbol) = fv.getArgTemp(base + i)
         }
 
-        emitStmt(method.body)(ctx, Nil, fv)
+        if (!method.isAbstract) {
+          emitStmt(method.body)(ctx, Nil, fv)
+        }
+
         fv.visitEnd()
       }
     }
