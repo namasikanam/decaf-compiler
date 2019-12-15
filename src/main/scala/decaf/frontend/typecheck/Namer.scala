@@ -278,6 +278,8 @@ class Namer(implicit config: Config)
             // Only non-static methods can be overriden, but the type signature must be equivalent.
             val ret = typeTypeLit(returnType)
             ret.typ match {
+              // This case won't be reached,
+              // but I still preserve it for potential unexpected error.
               case NoType => None
               case retType =>
                 val formalScope = new FormalScope
