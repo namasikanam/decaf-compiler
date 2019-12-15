@@ -535,7 +535,6 @@ class Typer(implicit config: Config)
             issue(new NotClassFieldError(method, t, method.pos)); err
         }
 
-      // TODO: I don't know how to call a simple function here……
       case call @ Call(func, args) =>
         val f = typeExpr(func)
         f.typ match {
@@ -707,7 +706,7 @@ class Typer(implicit config: Config)
                       }
                     MemberVar(v)(v.typ)
                   case m: MethodSymbol =>
-                    if (m.isStatic) { // TODO: Some unkown issue should occur here
+                    if (m.isStatic) { // TODO: Some unknown issue should occur here
                     }
                     MemberMethod(r, m)(m.typ)
                   case _ => issue(new FieldNotFoundError(id, t, expr.pos)); err
