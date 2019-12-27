@@ -25,7 +25,7 @@ object TypedTree extends TreeTmpl {
   // The following nodes only appear in a typed tree.
 
   /**
-    * A local variable. Derives from [[SyntaxTree.VarSel]].
+    * A local variable.
     *
     * @param variable the symbol of the variable definition it refers to
     */
@@ -33,16 +33,16 @@ object TypedTree extends TreeTmpl {
       extends LValue
 
   /**
-    * A member variable. Derives from [[SyntaxTree.VarSel]].
+    * A member variable.
     *
     * @param receiver target instance
     * @param variable the symbol of the member definition it refers to
     */
-  case class MemberVar(variable: MemberVarSymbol)(
+  case class MemberVar(receiver: Expr, variable: MemberVarSymbol)(
       implicit val annot: ExprAnnot
   ) extends LValue
 
-  case class MemberMethod(receiver: Expr, variable: MethodSymbol)(
+  case class MemberMethod(receiver: Expr, method: MethodSymbol)(
       implicit val annot: ExprAnnot
   ) extends LValue
 
@@ -50,7 +50,7 @@ object TypedTree extends TreeTmpl {
       implicit val annot: ExprAnnot
   ) extends LValue
 
-  case class StaticMethod(owner: ClassSymbol, variable: MethodSymbol)(
+  case class StaticMethod(owner: ClassSymbol, method: MethodSymbol)(
       implicit val annot: ExprAnnot
   ) extends LValue
 
@@ -80,7 +80,8 @@ object TypedTree extends TreeTmpl {
     *
     * @param array an expression evaluates to an array
     */
-  case class ArrayLenCall(array: Expr)(implicit val annot: ExprAnnot) extends Expr
+  case class ArrayLenCall(array: Expr)(implicit val annot: ExprAnnot)
+      extends Expr
 
   /**
     * Calling a function. Derives from [[SyntaxTree.Call]].
@@ -114,9 +115,8 @@ object TypedTree extends TreeTmpl {
     */
   case class UnTypedNewClass(id: Id)(
       implicit val annot: ExprAnnot = NoType
-    )
-      extends Expr
-    
+  ) extends Expr
+
   /**
     * Instance-of check.
     * {{{
@@ -126,8 +126,7 @@ object TypedTree extends TreeTmpl {
     */
   case class UnTypedClassTest(obj: Expr, is: Id)(
       implicit val annot: ExprAnnot = NoType
-    )
-      extends Expr
+  ) extends Expr
 
   /**
     * Class type cast expression.
@@ -138,8 +137,7 @@ object TypedTree extends TreeTmpl {
     */
   case class UnTypedClassCast(obj: Expr, to: Id)(
       implicit val annot: ExprAnnot = NoType
-    )
-      extends Expr
+  ) extends Expr
 
   // Error types
   case class ErrorSynExpr(expr: SyntaxTree.Expr)(

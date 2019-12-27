@@ -195,7 +195,8 @@ public class FuncVisitor {
      * @param clazz      class name
      * @param method     member method name
      * @param args       argument temps
-     * @param needReturn do we need a fresh temp to store the return value? (default false)
+     * @param needReturn do we need a fresh temp to store the return value? (default
+     *                   false)
      * @return the fresh temp if we need return (or else null)
      */
     public Temp visitMemberCall(Temp object, String clazz, String method, List<Temp> args, boolean needReturn) {
@@ -229,7 +230,8 @@ public class FuncVisitor {
      * @param clazz      class name
      * @param method     method name
      * @param args       argument temps
-     * @param needReturn do we need a fresh temp to store the return value? (default false)
+     * @param needReturn do we need a fresh temp to store the return value? (default
+     *                   false)
      * @return the fresh temp if we need return (or else null)
      */
     public Temp visitStaticCall(String clazz, String method, List<Temp> args, boolean needReturn) {
@@ -256,10 +258,55 @@ public class FuncVisitor {
     }
 
     /**
+     * Append instructions to invoke a function.
+     * 
+     * @param function   function object
+     * @param args       argument temps
+     * @param needReturn do we need a fresh temp to store the return value? (default
+     *                   false)
+     * 
+     * @return the fresh temp if we need return (or else null)
+     */
+    public Temp visitFunctionCall(Temp function, List<Temp> args, boolean needReturn) {
+        Temp temp = null;
+
+        // 生成 entry = *(func + 0)
+        // entry is also a temp
+        var entry = visitLoadFrom(function);
+
+        // 生成 parm func
+        func.add(new TacInstr.Parm(entry));
+
+        // for arg in args
+        for (var arg : args) {
+            // 生成 parm arg
+            func.add(new TacInstr.Parm(arg));
+        }
+
+        // 生成 ret = call entry
+        if (needReturn) {
+            temp = freshTemp();
+            func.add(new TacInstr.IndirectCall(temp, entry));
+        } else {
+            func.add(new TacInstr.IndirectCall(entry));
+        }
+
+        return temp;
+    }
+
+    /**
+     * @see #visitFuncCall(String, List<Temp>, boolean)
+     */
+    public void visitFunctionCall(Temp function, List<Temp> args) {
+        visitFunctionCall(function, args, false);
+    }
+
+    /**
      * Append instructions to invoke an intrinsic method.
      *
      * @param func       intrinsic function
-     * @param needReturn do we need a fresh temp to store the return value? (default false)
+     * @param needReturn do we need a fresh temp to store the return value? (default
+     *                   false)
      * @param args       argument temps
      * @return the fresh temp if we need return (or else null)
      */
@@ -392,10 +439,29 @@ public class FuncVisitor {
     }
 
     /**
+     * Create a fresh function.
+     * 
+     * @param func    needs to be unique
+     * @param numArgs watch out [this]
+     *
+     * @return a new FuncVisitor
+     */
+    public FuncVisitor freshFunc(String func, int numArgs) {
+        ctx.putFuncLabel(func);
+        var entry = ctx.getFuncLabel(func);
+
+        FuncVisitor newFv = new FuncVisitor(entry, numArgs, ctx);
+        ctx.addFunc(entry);
+
+        return newFv;
+    }
+
+    /**
      * Get the temp for the {@code index}-th argument.
      * <p>
-     * According to TAC virtual machine calling convention, for a function with {@code n} arguments, the temps with id
-     * from 0 to {@code n - 1} are reserved for passing these {@code n} arguments.
+     * According to TAC virtual machine calling convention, for a function with
+     * {@code n} arguments, the temps with id from 0 to {@code n - 1} are reserved
+     * for passing these {@code n} arguments.
      *
      * @param index argument index, start from 0
      * @return temp

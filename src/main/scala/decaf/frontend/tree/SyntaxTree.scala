@@ -40,5 +40,4 @@ object SyntaxTree extends TreeTmpl {
   type ClassRef = Id
 
   // The following nodes only appear in a syntax tree.
-
 }

@@ -2,7 +2,13 @@ package decaf.frontend.tac
 
 import decaf.frontend.annot.SymbolImplicit._
 import decaf.frontend.annot.TypeImplicit._
-import decaf.frontend.annot.{BoolType, IntType, LocalVarSymbol, StringType}
+import decaf.frontend.annot.{
+  BoolType,
+  IntType,
+  LocalVarSymbol,
+  StringType,
+  FunType
+}
 import decaf.frontend.tree.TreeNode
 import decaf.frontend.tree.TypedTree._
 import decaf.lowlevel.StringUtils
@@ -12,6 +18,7 @@ import decaf.lowlevel.tac.{FuncVisitor, Intrinsic, RuntimeError, TacInstr}
 import decaf.util.Conversions._
 
 import scala.collection.mutable
+import scala.util.Random
 
 /**
   * Helper methods for TAC emission.
@@ -54,10 +61,12 @@ trait TacEmitter {
         val addr = emitArrayElementAddress(at, it)
         val t = emitExpr(rhs)
         fv.visitStoreTo(addr, t)
-      //   case Assign(MemberVar(receiver, v), rhs) =>
-      //     val rt = emitExpr(receiver)
-      //     val t = emitExpr(rhs)
-      //     fv.visitMemberWrite(rt, v.owner.name, v.name, t)
+
+      case Assign(MemberVar(receiver, v), rhs) =>
+        val rcv = emitExpr(receiver)
+        val rs = emitExpr(rhs)
+        fv.visitMemberWrite(rcv, v.owner.name, v.name, rs)
+
       case Assign(LocalVar(v), rhs) =>
         val t = emitExpr(rhs)
         fv.visitAssign(ctx.vars(v), t)
@@ -113,6 +122,8 @@ trait TacEmitter {
     * @return a temp storing the value of this expression
     */
   def emitExpr(expr: Expr)(implicit ctx: Context, fv: FuncVisitor): Temp = {
+    printf(s"emitExpr(expr = $expr)\n")
+
     expr match {
       case IntLit(value)    => fv.visitLoad(value)
       case BoolLit(value)   => fv.visitLoad(value)
@@ -189,18 +200,72 @@ trait TacEmitter {
 
       case NewClass(clazz) => fv.visitNewClass(clazz.name)
       case This()          => fv.getArgTemp(0)
-      //   case MemberVar(receiver, field) =>
-      //     val rt = emitExpr(receiver)
-      //     fv.visitMemberAccess(rt, field.owner.name, field.name)
+
+      case MemberVar(receiver, variable) =>
+        val rt = emitExpr(receiver)
+        fv.visitMemberAccess(rt, variable.owner.name, variable.name)
+
+      // case MemberMethod(receiver, method) =>
+      // TODO: modify according to the documentation of Chenhao Li
+      // val r = emitExpr(receiver)
+      // fv.visitMemberAccess(r, method.owner.name, method.name)
+
+      case StaticMethod(owner, method) =>
+        // TODO: transform the natural language written by Chenhao Li to correct formal language
+
+        // 访问 expr.receiver
+        // Q: 什么是 expr.receiver？
+
+        // Not sure if this is needed to be saved somewhere
+        val methodName = "static:" + owner.name + "." + method.name + "@" + Random.alphanumeric
+          .take(10)
+          .mkString
+
+        val newFv = fv.freshFunc(
+          methodName,
+          method.typ.args.size()
+        )
+
+        implicit val ctx = new Context
+        method.params.zipWithIndex.foreach {
+          case (p, i) => ctx.vars(p.symbol) = newFv.getArgTemp(i)
+        }
+        newFv.StaticCall()
+
+        // ret = newMv.visitStaticCall(, args, true) // 这调⽤的是普通函数，所以可以参考原来的调⽤普通函数的代码
+
+        // 在newMv中⽣成 return ret
+        emitStmt(method.body)(ctx, Nil, newFv)
+
+        newFv.visitEnd()
+
+        // 在mv中⽣成 result = ALLOCATE(8)
+        val result = fv.visitIntrinsicCall(Intrinsic.ALLOCATE, true, 8);
+
+        // 在mv中⽣成 获取新虚表
+
+        // 在mv中⽣成 func = 从新虚表中获取新生成的函数，这需要一个偏移量，你应该在前几步中把它维护好
+
+        // 在mv中⽣成 *(result + 0) = func
+
+        // 在mv中⽣成 *(result + 4) = expr.receiver
+
+        result
+
+      // case ExpressionLambda(params, expr, scope) =>
+      // TODO: write this case similar to the above two cases
+
+      // case BlockLamda(params, block, scope) =>
+      // TODO: write this case similar to the above case
 
       case MemberCall(receiver, method, args) =>
-        val rt = emitExpr(receiver)
+        val rv = emitExpr(receiver)
         val as = args.map(emitExpr)
         if (method.typ.ret.isVoidType) {
-          fv.visitMemberCall(rt, method.owner.name, method.name, as)
+          fv.visitMemberCall(rv, method.owner.name, method.name, as)
           null
         } else {
-          fv.visitMemberCall(rt, method.owner.name, method.name, as, true)
+          fv.visitMemberCall(rv, method.owner.name, method.name, as, true)
         }
       case StaticCall(method, args) =>
         val as = args.map(emitExpr)
@@ -210,6 +275,26 @@ trait TacEmitter {
         } else {
           fv.visitStaticCall(method.owner.name, method.name, as, true)
         }
+
+      case FunctionCall(function, args) =>
+        // 访问 expr.func
+        val func = emitExpr(function)
+
+        // for arg in expr.args
+        //    访问 arg
+        val as = args.map(emitExpr)
+
+        // 将 ret 保存到 expr.val 中
+        if (func.typ.asInstanceOf[FunType].ret.isVoidType) {
+          fv.visitFunctionCall(func, as)
+          null
+        } else {
+          fv.visitFunctionCall(func, as, true)
+        }
+
+      //   case ArrayLenCall(array) =>
+      // not required in PA3
+
       case ClassTest(obj, clazz) if obj.typ <= clazz.typ =>
         // Accelerate: when obj.type <: is.type, the test must be successful!
         fv.visitLoad(true)

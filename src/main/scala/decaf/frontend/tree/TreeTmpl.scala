@@ -202,7 +202,7 @@ trait TreeTmpl {
 
   /**
     * Var type: {{{ 'var' }}}
-    * 
+    *
     * This means that it can't be read directly in the Namer,
     * but will wait to Type to calculate the type.
     */
@@ -215,9 +215,9 @@ trait TreeTmpl {
   case class TNull()(implicit val annot: TypeLitAnnot) extends TypeLit
 
   /**
-   * Representing an error type.
-   * Corresponding to [[NoType]]
-   */
+    * Representing an error type.
+    * Corresponding to [[NoType]]
+    */
   case class TError()(implicit val annot: TypeLitAnnot) extends TypeLit
 
   /**
@@ -504,7 +504,7 @@ trait TreeTmpl {
       var scope: FormalScope = new FormalScope
   )(
       implicit val annot: ExprAnnot
-  ) extends Expr{
+  ) extends Expr {
     override def productPrefix: String = "Lambda"
   }
 
@@ -513,7 +513,7 @@ trait TreeTmpl {
     *
     * @param params  parameter list
     * @param block   block
-    * @param scope   
+    * @param scope
     */
   case class BlockLambda(
       params: List[LocalVarDef],
@@ -521,7 +521,7 @@ trait TreeTmpl {
       var scope: FormalScope = new FormalScope
   )(
       implicit val annot: ExprAnnot
-  ) extends Expr{
+  ) extends Expr {
     override def productPrefix: String = "Lambda"
   }
 
@@ -578,7 +578,7 @@ trait TreeTmpl {
     */
   case class ClassCast(obj: Expr, to: ClassRef)(implicit val annot: ExprAnnot)
       extends Expr
-
+  
   /**
     * Field selection, or simply a local variable.
     * {{{

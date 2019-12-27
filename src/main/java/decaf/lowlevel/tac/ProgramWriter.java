@@ -3,17 +3,19 @@ package decaf.lowlevel.tac;
 import decaf.lowlevel.label.FuncLabel;
 import decaf.lowlevel.label.Label;
 
+import java.lang.StackWalker.Option;
 import java.util.*;
 
 /**
- * High-level helper methods which can guide you to generate a TAC program, without knowing the underlying instruction
- * encoding.
+ * High-level helper methods which can guide you to generate a TAC program,
+ * without knowing the underlying instruction encoding.
  */
 public class ProgramWriter {
     /**
      * Constructor.
      *
-     * @param classes basic info of classes declared in the program (warning: the arg will be modified by this method).
+     * @param classes basic info of classes declared in the program (warning: the
+     *                arg will be modified by this method).
      */
     public ProgramWriter(List<ClassInfo> classes) {
         for (var clazz : classes) {
@@ -21,11 +23,14 @@ public class ProgramWriter {
         }
     }
 
+    private String nameOfGlobalVTable;
+
     /**
      * Generate TAC code for virtual tables.
      */
     public void visitVTables() {
-        // Allocate labels for every method, including the constructor <init>, which initializes an object.
+        // Allocate labels for every method, including the constructor <init>, which
+        // initializes an object.
         for (var clazz : classes.values()) {
             ctx.putConstructorLabel(clazz.name);
             for (var method : clazz.methods) {
@@ -37,6 +42,11 @@ public class ProgramWriter {
         for (var clazz : classes.values()) {
             buildVTableFor(clazz);
         }
+
+        // Build the special virtual table
+        nameOfGlobalVTable = "GlobalVTable@" + UUID.randomUUID().toString();
+        buildVTableFor(new ClassInfo(nameOfGlobalVTable, Optional.empty(), new HashSet<String>(), new HashSet<String>(),
+                new HashSet<String>(), false));
 
         // Create the `new` method for every class.
         for (var clazz : classes.values()) {
@@ -78,10 +88,9 @@ public class ProgramWriter {
     private Context ctx = new Context();
 
     /**
-     * Emit code for initializing a new object. In memory, an object takes 4 * (1 + number of member variables) bytes,
-     * where:
-     * - the first 4 bytes: address of its virtual table
-     * - next bytes: values/references of every member variables
+     * Emit code for initializing a new object. In memory, an object takes 4 * (1 +
+     * number of member variables) bytes, where: - the first 4 bytes: address of its
+     * virtual table - next bytes: values/references of every member variables
      *
      * @param clazz class name
      */
@@ -99,7 +108,8 @@ public class ProgramWriter {
     }
 
     private void buildVTableFor(ClassInfo clazz) {
-        if (ctx.hasVTable(clazz.name)) return;
+        if (ctx.hasVTable(clazz.name))
+            return;
 
         var parent = clazz.parent.map(c -> {
             buildVTableFor(classes.get(c));
@@ -130,7 +140,8 @@ public class ProgramWriter {
 
         // Similarly, member variables consist of ones that are:
         // 1. inherited from super class
-        // 2. overriden by this class (Decaf doesn't support this, but handle it for future)
+        // 2. overriden by this class (Decaf doesn't support this, but handle it for
+        // future)
 
         if (parent.isPresent()) {
             for (var variable : parent.get().memberVariables) {
@@ -156,12 +167,24 @@ public class ProgramWriter {
             return getFuncLabel(clazz, "new");
         }
 
+        String getGlobalVTableName() {
+            return nameOfGlobalVTable;
+        }
+
         void putFuncLabel(String clazz, String method) {
             labels.put(clazz + "." + method, new FuncLabel(clazz, method));
         }
 
+        void putFuncLabel(String func) {
+            labels.put(nameOfGlobalVTable + "." + func, new FuncLabel(nameOfGlobalVTable, func));
+        }
+
         FuncLabel getFuncLabel(String clazz, String method) {
             return labels.get(clazz + "." + method);
+        }
+
+        FuncLabel getFuncLabel(String func) {
+            return labels.get(nameOfGlobalVTable + "." + func);
         }
 
         Label freshLabel() {
@@ -204,6 +227,13 @@ public class ProgramWriter {
                 offsets.put(prefix + variable, offset);
                 offset += 4;
             }
+        }
+
+        void addFunc(FuncLabel func) {
+            offsets.put(nameOfGlobalVTable + "." + func.method,
+                    vtables.get(nameOfGlobalVTable).memberMethods.size() * 4 + 8);
+
+            vtables.get(nameOfGlobalVTable).memberMethods.add(func);
         }
 
         private Map<String, FuncLabel> labels = new TreeMap<>();

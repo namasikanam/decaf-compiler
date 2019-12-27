@@ -50,21 +50,23 @@ class Typer(implicit config: Config)
 
             // printf(s"Check method $m\n")
 
-            val (checkedBody, blockReturnType, blockReturns) = checkBlock(body)(formalCtx)
+            val (checkedBody, blockReturnType, blockReturns) =
+              checkBlock(body)(formalCtx)
 
             // printf(s"After check the block of the method, blockReturnType = $blockReturnType\n")
 
             // Only non-abstract method needs error checking
             if (!m.isAbstract) {
-                // Check if the body always returns a value, when the method is non-void
-                if (!methodReturnTypeLit.typ.isVoidType && !blockReturns) 
-                    issue(new MissingReturnError(body.pos))
-                if (blockReturnType == NoType)
-                    issue(new TypeIncompError(body.pos))
+              // Check if the body always returns a value, when the method is non-void
+              if (!methodReturnTypeLit.typ.isVoidType && !blockReturns)
+                issue(new MissingReturnError(body.pos))
+              if (blockReturnType == NoType)
+                issue(new TypeIncompError(body.pos))
             }
 
-            MethodDef(mod, id, methodReturnTypeLit, params, checkedBody)(m.symbol)
-              .setPos(m.pos)
+            MethodDef(mod, id, methodReturnTypeLit, params, checkedBody)(
+              m.symbol
+            ).setPos(m.pos)
         }
         ClassDef(id, parent, checkedFields)(symbol).setPos(clazz.pos)
     }
@@ -105,12 +107,16 @@ class Typer(implicit config: Config)
     // Find the last [[stmt]] who has a correct return type
     val returnTypes = ss.filter(_._2 != EmptyType).map(_._2)
     val returnType = returnTypes.length match {
-        case 0 => EmptyType
-        case 1 => returnTypes.head
-        case _ => returnTypes.reduce(typeUpperBound2)
+      case 0 => EmptyType
+      case 1 => returnTypes.head
+      case _ => returnTypes.reduce(typeUpperBound2)
     }
-    
-    (Block(ss.map(_._1))(block.scope).setPos(block.pos), returnType, !ss.filter(_._3).isEmpty)
+
+    (
+      Block(ss.map(_._1))(block.scope).setPos(block.pos),
+      returnType,
+      !ss.filter(_._3).isEmpty
+    )
   }
 
   /**
@@ -155,7 +161,12 @@ class Typer(implicit config: Config)
             }
             if (!(typeInitExpr.typ <= declTypeLit.typ)) {
               issue(
-                new IncompatBinOpError("=", declTypeLit.typ, typeInitExpr.typ, v.assignPos)
+                new IncompatBinOpError(
+                  "=",
+                  declTypeLit.typ,
+                  typeInitExpr.typ,
+                  v.assignPos
+                )
               )
               declTypeLit = TError()
             }
@@ -164,16 +175,20 @@ class Typer(implicit config: Config)
 
             val symbol = new LocalVarSymbol(v, declTypeLit.typ)
             ctx.declare(symbol)
-            (LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(symbol), EmptyType, false)
+            (
+              LocalVarDef(declTypeLit, v.id, Some(typeInitExpr))(symbol),
+              EmptyType,
+              false
+            )
           case None =>
             v.typeLit match {
               case TVar() =>
                 issue(new DeclVoidTypeError(v.name, v.pos))
-                
+
                 val symbol = new LocalVarSymbol(v, NoType)
                 ctx.declare(symbol)
                 (LocalVarDef(TError(), v.id, None)(symbol), EmptyType, false)
-              case _      => (v, EmptyType, false);
+              case _ => (v, EmptyType, false);
             }
         }
 
@@ -181,16 +196,21 @@ class Typer(implicit config: Config)
         val l = typeLValue(lhs)
         val r = typeExpr(rhs)
         l match {
-            case m: MemberMethod => issue(new AssignMethodError(m.variable.name, stmt.pos))
-            case m: StaticMethod => issue(new AssignMethodError(m.variable.name, stmt.pos))
-            case v: LocalVar =>
-                // if (ctx.currentScope.isLambda && v.variable.domain.isLocal && v.variable.domain != ctx.currentScope)
+          case m: MemberMethod =>
+            issue(new AssignMethodError(m.method.name, stmt.pos))
+          case m: StaticMethod =>
+            issue(new AssignMethodError(m.method.name, stmt.pos))
+          case v: LocalVar =>
+            // if (ctx.currentScope.isLambda && v.variable.domain.isLocal && v.variable.domain != ctx.currentScope)
 
-                // printf(s"Assign a local var:\n domain = ${v.variable.domain},\n scopes = ${ctx.scopes.mkString("\n")}\nEndAssign\n")
+            // printf(s"Assign a local var:\n domain = ${v.variable.domain},\n scopes = ${ctx.scopes.mkString("\n")}\nEndAssign\n")
 
-                if (ctx.currentScope.isLambda && v.variable.domain.isLocal && !checkSameLocal(v.variable.domain, ctx.scopes))
-                    issue(new AssCapturedError(stmt.pos))
-            case _ =>
+            if (ctx.currentScope.isLambda && v.variable.domain.isLocal && !checkSameLocal(
+                  v.variable.domain,
+                  ctx.scopes
+                ))
+              issue(new AssCapturedError(stmt.pos))
+          case _ =>
         }
         l.typ match {
           case NoType => // do nothing
@@ -210,11 +230,15 @@ class Typer(implicit config: Config)
         val c = checkTestExpr(cond)
         val (t, trueReturnType, trueReturns) = checkBlock(trueBranch)
         val (f, rt, r) = falseBranch.map(checkBlock) match {
-            case Some((fb, falseBranchType, falseReturns)) =>
-                // printf(s"At ${stmt.pos}, the 'If stmt' has two branches, trueReturns = $trueReturns, falseReturns = $falseReturns\n")
+          case Some((fb, falseBranchType, falseReturns)) =>
+            // printf(s"At ${stmt.pos}, the 'If stmt' has two branches, trueReturns = $trueReturns, falseReturns = $falseReturns\n")
 
-                (Some(fb), typeUpperBound2(trueReturnType, falseBranchType), trueReturns && falseReturns)
-            case None => (None, trueReturnType, false)
+            (
+              Some(fb),
+              typeUpperBound2(trueReturnType, falseBranchType),
+              trueReturns && falseReturns
+            )
+          case None => (None, trueReturnType, false)
         }
 
         // printf(s"At ${stmt.pos}, An 'If stmt', returnType = ${rt}, returns = $r\n")
@@ -235,9 +259,9 @@ class Typer(implicit config: Config)
         val ss = body.stmts.map { checkStmt(_)(local, insideLoop = true) }
         val bodyReturnTypes = ss.filter(_._2 != EmptyType).map(_._2)
         val (bodyReturnType, returns) = bodyReturnTypes.length match {
-            case 0 => (EmptyType, false)
-            case 1 => (bodyReturnTypes.head, true)
-            case _ => (bodyReturnTypes.reduce(typeUpperBound2 _), true)
+          case 0 => (EmptyType, false)
+          case 1 => (bodyReturnTypes.head, true)
+          case _ => (bodyReturnTypes.reduce(typeUpperBound2 _), true)
         }
         val b = Block(ss.map(_._1))(body.scope)
         (For(i, c, u, b), typeUpperBound(List(crt, urt, bodyReturnType)), cr)
@@ -253,12 +277,12 @@ class Typer(implicit config: Config)
         }
         val actual = e.map(_.typ).getOrElse(VoidType)
         if (!ctx.currentScope.isLambda) {
-            // printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
-            // printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
-            // printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
+          // printf(s"Return:\n ctx.currentMethod = ${ctx.currentMethod}\n")
+          // printf(s"ctx.currentMethod.typ = ${ctx.currentMethod.typ}")
+          // printf(s"ctx.currentMethod.typ.ret = ${ctx.currentMethod.typ.ret}")
 
-            val expected = ctx.currentMethod.typ.ret
-            if (actual.noError && !(actual <= expected))
+          val expected = ctx.currentMethod.typ.ret
+          if (actual.noError && !(actual <= expected))
             issue(new BadReturnTypeError(expected, actual, stmt.pos))
         }
         (Return(e), actual, true)
@@ -361,12 +385,13 @@ class Typer(implicit config: Config)
         var (b, retTyp, returns) = checkBlock(block)(lctx)
 
         if (retTyp == EmptyType) retTyp = VoidType
-        
+
         var typ = FunType(params.map(_.typeLit.typ), retTyp)
 
         // printf(s"At ${expr.pos}, Type BlockLambda (retTyp = $retTyp, returns = $returns)\n")
 
-        if (!retTyp.isVoidType && !returns) issue(new MissingReturnError(block.pos))
+        if (!retTyp.isVoidType && !returns)
+          issue(new MissingReturnError(block.pos))
         if (retTyp == NoType) issue(new TypeIncompError(block.pos))
 
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
@@ -380,17 +405,17 @@ class Typer(implicit config: Config)
 
       case UnTypedNewClass(id) =>
         ctx.global.find(id) match {
-            case Some(clazz) =>
-                if (clazz.isAbstract) {
-                    issue(new NewAbstractError(id, expr.pos))
-                    err
-                } else NewClass(clazz)(clazz.typ)
-            case None => issue(new ClassNotFoundError(id, expr.pos)); err
-            }
+          case Some(clazz) =>
+            if (clazz.isAbstract) {
+              issue(new NewAbstractError(id, expr.pos))
+              err
+            } else NewClass(clazz)(clazz.typ)
+          case None => issue(new ClassNotFoundError(id, expr.pos)); err
+        }
 
       case This() =>
         if (ctx.currentMethod.isStatic)
-            issue(new ThisInStaticFuncError(expr.pos))
+          issue(new ThisInStaticFuncError(expr.pos))
         This()(ctx.currentClass.typ)
 
       // Call
@@ -448,88 +473,109 @@ class Typer(implicit config: Config)
                 }
               case None =>
                 if (receiver == None) {
-                    issue(new UndeclVarError(method.name, method.pos)); err
-                }
-                else {
-                    issue(new FieldNotFoundError(method.name, t, method.pos)); err
+                  issue(new UndeclVarError(method.name, method.pos)); err
+                } else {
+                  issue(new FieldNotFoundError(method.name, t, method.pos)); err
                 }
             }
           case None =>
             ctx.lookupBefore(method, method.pos) match {
-                case Some(sym) if !initVars.contains(sym.name) =>
-                    sym match {
-                    case v: LocalVarSymbol =>
-                        v.typ match {
-                            case FunType(typArgs, ret) =>
-                                if (typArgs.length != args.length) {
-                                    issue(new BadArgCountError(v.name, typArgs.length, args.length, expr.pos))
-                                }
-                                val as = (typArgs zip args).zipWithIndex.map {
-                                    case ((t, a), i) =>
-                                    val e = typeExpr(a)
-                                    if (e.typ.noError && !(e.typ <= t)) {
-                                        issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
-                                    }
-                                    e
-                                }
-                                FunctionCall(LocalVar(v)(v.typ), as)(ret)
-                            case NoType => err
-                            case _ =>
-                                issue(new CallUncallableError(v.typ, expr.pos))
-                                err
-                        }
-                    case v: MemberVarSymbol =>
-                        v.typ match {
-                            case FunType(typArgs, ret) =>
-                                if (typArgs.length != args.length) {
-                                    issue(new BadArgCountError(v.name, typArgs.length, args.length, expr.pos))
-                                }
-                                val as = (typArgs zip args).zipWithIndex.map {
-                                    case ((t, a), i) =>
-                                    val e = typeExpr(a)
-                                    if (e.typ.noError && !(e.typ <= t)) {
-                                        issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
-                                    }
-                                    e
-                                }
-                                // TODO: fix this cheat……
-                                FunctionCall(MemberVar(v)(v.typ), as)(ret)
-                            case NoType => err
-                            case _ =>
-                                issue(new CallUncallableError(v.typ, expr.pos))
-                                err
-                        }
-                    case m: MethodSymbol =>
-                        // printf("Yes, None receiver, MethodSymbol~\n");
-
-                        if (ctx.currentMethod.isStatic && !m.isStatic) {
-                            issue(
-                                new RefNonStaticError(
-                                    m.name,
-                                    ctx.currentMethod.name,
-                                    call.expr.pos
-                                )
+              case Some(sym) if !initVars.contains(sym.name) =>
+                sym match {
+                  case v: LocalVarSymbol =>
+                    v.typ match {
+                      case FunType(typArgs, ret) =>
+                        if (typArgs.length != args.length) {
+                          issue(
+                            new BadArgCountError(
+                              v.name,
+                              typArgs.length,
+                              args.length,
+                              expr.pos
                             )
+                          )
                         }
-                        m.typ match {
-                            case FunType(typArgs, ret) =>
-                            if (typArgs.length != args.length) {
-                                issue(new BadArgCountError(m.name, typArgs.length, args.length, expr.pos))
+                        val as = (typArgs zip args).zipWithIndex.map {
+                          case ((t, a), i) =>
+                            val e = typeExpr(a)
+                            if (e.typ.noError && !(e.typ <= t)) {
+                              issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
                             }
-                            val as = (typArgs zip args).zipWithIndex.map {
-                                case ((t, a), i) =>
-                                val e = typeExpr(a)
-                                if (e.typ.noError && !(e.typ <= t)) {
-                                    issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
-                                }
-                                e
-                            }
-                            MemberCall(This(), m, as)(ret)
+                            e
                         }
-                    case _ =>
-                        issue(new UndeclVarError(method, method.pos)); err
+                        FunctionCall(LocalVar(v)(v.typ), as)(ret)
+                      case NoType => err
+                      case _ =>
+                        issue(new CallUncallableError(v.typ, expr.pos))
+                        err
+                    }
+                  case v: MemberVarSymbol =>
+                    v.typ match {
+                      case FunType(typArgs, ret) =>
+                        if (typArgs.length != args.length) {
+                          issue(
+                            new BadArgCountError(
+                              v.name,
+                              typArgs.length,
+                              args.length,
+                              expr.pos
+                            )
+                          )
+                        }
+                        val as = (typArgs zip args).zipWithIndex.map {
+                          case ((t, a), i) =>
+                            val e = typeExpr(a)
+                            if (e.typ.noError && !(e.typ <= t)) {
+                              issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                            }
+                            e
+                        }
+                        // TODO: fix this cheat¦
+                        // Q on 2019-12-20: What's cheat? What am I writing?
+                        FunctionCall(MemberVar(This(), v)(v.typ), as)(ret)
+                      case NoType => err
+                      case _ =>
+                        issue(new CallUncallableError(v.typ, expr.pos))
+                        err
+                    }
+                  case m: MethodSymbol =>
+                    // printf("Yes, None receiver, MethodSymbol~\n");
+
+                    if (ctx.currentMethod.isStatic && !m.isStatic) {
+                      issue(
+                        new RefNonStaticError(
+                          m.name,
+                          ctx.currentMethod.name,
+                          call.expr.pos
+                        )
+                      )
+                    }
+                    m.typ match {
+                      case FunType(typArgs, ret) =>
+                        if (typArgs.length != args.length) {
+                          issue(
+                            new BadArgCountError(
+                              m.name,
+                              typArgs.length,
+                              args.length,
+                              expr.pos
+                            )
+                          )
+                        }
+                        val as = (typArgs zip args).zipWithIndex.map {
+                          case ((t, a), i) =>
+                            val e = typeExpr(a)
+                            if (e.typ.noError && !(e.typ <= t)) {
+                              issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                            }
+                            e
+                        }
+                        MemberCall(This(), m, as)(ret)
+                    }
+                  case _ =>
+                    issue(new UndeclVarError(method, method.pos)); err
                 }
-                case _ => issue(new UndeclVarError(method, method.pos)); err
+              case _ => issue(new UndeclVarError(method, method.pos)); err
             }
           case Some(t) =>
             issue(new NotClassFieldError(method, t, method.pos)); err
@@ -541,13 +587,19 @@ class Typer(implicit config: Config)
           case NoType => err
           case FunType(typArgs, ret) =>
             if (typArgs.length != args.length) {
-                issue(new LambdaBadArgCountError(typArgs.length, args.length, expr.pos))
+              issue(
+                new LambdaBadArgCountError(
+                  typArgs.length,
+                  args.length,
+                  expr.pos
+                )
+              )
             }
             var as = (typArgs zip args).zipWithIndex.map {
-                case ((t, a), i) =>
+              case ((t, a), i) =>
                 val e = typeExpr(a)
                 if (e.typ.noError && !(e.typ <= t)) {
-                    issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                  issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
                 }
                 e
             }
@@ -561,16 +613,16 @@ class Typer(implicit config: Config)
         val o = typeExpr(obj)
         if (!o.typ.isClassType) issue(new NotClassError(o.typ, o.pos))
         ctx.global.find(clazz) match {
-            case Some(c) => ClassTest(o, c)(BoolType)
-            case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
+          case Some(c) => ClassTest(o, c)(BoolType)
+          case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
         }
 
       case UnTypedClassCast(obj, clazz) =>
         val o = typeExpr(obj)
         if (!o.typ.isClassType) issue(new NotClassError(o.typ, o.pos))
         ctx.global.find(clazz) match {
-            case Some(c) => ClassCast(o, c)(c.typ)
-            case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
+          case Some(c) => ClassCast(o, c)(c.typ)
+          case None    => issue(new ClassNotFoundError(clazz.name, expr.pos)); err
         }
     }
     typed.setPos(expr.pos)
@@ -616,6 +668,8 @@ class Typer(implicit config: Config)
   private def typeLValue(
       expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
+    // printf(s"typeLValue(expr = $expr)\n")
+
     val err = ErrorTypeLValue(expr)
 
     val typed = expr match {
@@ -642,19 +696,29 @@ class Typer(implicit config: Config)
                       )
                     )
                   }
-                MemberVar(v)(v.typ)
+                MemberVar(This(), v)(v.typ)
               case m: MethodSymbol =>
-                if (ctx.currentMethod.isStatic && !m.isStatic) // member vars cannot be accessed in a static method
-                {
-                    issue(
+                // printf(
+                //   s"Find a MethodSymbol $m, m.isStatic = ${m.isStatic}, ctx.currentMethod.isStatic = ${ctx.currentMethod.isStatic}\n"
+                // )
+
+                if (!m.isStatic) // member vars cannot be accessed in a static method
+                  {
+                    if (ctx.currentMethod.isStatic) {
+                      issue(
                         new RefNonStaticError(
-                        id,
-                        ctx.currentMethod.name,
-                        expr.pos
+                          id,
+                          ctx.currentMethod.name,
+                          expr.pos
                         )
-                    )
+                      )
+                    }
+                    MemberMethod(This(), m)(m.typ)
+                  } else {
+                  if (ctx.currentMethod.isStatic)
+                    StaticMethod(ctx.currentClass, m)(m.typ)
+                  else MemberMethod(This(), m)(m.typ)
                 }
-                MemberMethod(This(), m)(m.typ)
               case _ =>
                 // printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
 
@@ -666,8 +730,7 @@ class Typer(implicit config: Config)
             issue(new UndeclVarError(id, expr.pos)); err
         }
 
-      case VarSel(Some(VarSel(None, id)), f)
-          if ctx.global.contains(id) =>
+      case VarSel(Some(VarSel(None, id)), f) if ctx.global.contains(id) =>
         // special case like MyClass.foo: report error cannot access field 'foo' from 'class : MyClass'
         val clazz = ctx.global(id)
         clazz.scope.lookup(f) match {
@@ -704,7 +767,7 @@ class Typer(implicit config: Config)
                       {
                         issue(new FieldNotAccessError(id, t, expr.pos))
                       }
-                    MemberVar(v)(v.typ)
+                    MemberVar(r, v)(v.typ)
                   case m: MethodSymbol =>
                     if (m.isStatic) { // TODO: Some unknown issue should occur here
                     }
