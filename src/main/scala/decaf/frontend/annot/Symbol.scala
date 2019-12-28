@@ -213,14 +213,14 @@ object LocalVarSymbol {
   * Lambda symbol, representing a lambda definition.
   *
   * @param typ
-  * @param scope 
+  * @param scope
   * @param _pos
   */
 class LambdaSymbol(
     var typ: FunType,
     val scope: FormalScope,
     val _pos: Pos
-) extends Symbol{
+) extends Symbol {
 
   type Typ = FunType
 

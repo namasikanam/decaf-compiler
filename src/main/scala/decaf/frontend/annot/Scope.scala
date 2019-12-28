@@ -99,7 +99,15 @@ sealed trait Scope extends Annot {
   override def toString: String =
     "{ " + (symbols.map {
       case (name, symbol) => s"  $name --> $symbol"
-    } mkString "\n") + "\n(isFormal = " + (if (this.isFormal) "true" else "false") + ")" + " , " + "(isLambda = " + (if (this.isLambda) "true" else "false") + ") , " + "(isLocal = " + (if (this.isLocal) "true" else "false") + ") }"
+    } mkString "\n") + "\n(isFormal = " + (if (this.isFormal) "true"
+                                           else
+                                             "false") + ")" + " , " + "(isLambda = " + (if (this.isLambda)
+                                                                                          "true"
+                                                                                        else
+                                                                                          "false") + ") , " + "(isLocal = " + (if (this.isLocal)
+                                                                                                                                 "true"
+                                                                                                                               else
+                                                                                                                                 "false") + ") }"
 
   /**
     * Actual symbol table: maps names to their symbols.
@@ -165,6 +173,9 @@ class FormalScope extends Scope {
   var ownerMethod: MethodSymbol = _
 
   var owner: Symbol = _
+
+  // This is only for the FormalScope of some lambda
+  var captured: List[LocalVarSymbol] = List()
 }
 
 /**
@@ -245,21 +256,22 @@ class ScopeContext private (
     //   printf(s"Before open, ownerMethod = ${currentMethod}\n")
     //   printf(s"open scope $scope\n")
 
-      scope match {
-        case s: ClassScope =>
+    scope match {
+      case s: ClassScope =>
         s.parent match {
-            case Some(ps) =>
+          case Some(ps) =>
             new ScopeContext(global, s :: open(ps).scopes, s, s.owner, null)
-            case None => new ScopeContext(global, s :: scopes, s, s.owner, null)
+          case None => new ScopeContext(global, s :: scopes, s, s.owner, null)
         }
-        case s: FormalScope =>
-        if (s.isLambda) new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
+      case s: FormalScope =>
+        if (s.isLambda)
+          new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
         else {
-            // printf(s"open a new method: ${s.ownerMethod}\n")
+          // printf(s"open a new method: ${s.ownerMethod}\n")
 
-            new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
+          new ScopeContext(global, s :: scopes, s, currentClass, s.ownerMethod)
         }
-        case s: LocalScope =>
+      case s: LocalScope =>
         new ScopeContext(global, s :: scopes, s, currentClass, currentMethod)
     }
   }
@@ -287,17 +299,17 @@ class ScopeContext private (
         if (!cond(s)) {
           None
         } else {
-        //   printf(s"Find '$key' in scope $s\n")
+          //   printf(s"Find '$key' in scope $s\n")
 
           s.find(key) match {
             case Some(symbol) if p(symbol) =>
-                // printf(s"Find '$key'!\n")
+              // printf(s"Find '$key'!\n")
 
-                Some(symbol)
-            case _                         =>
-                // printf("Not found...\n")
+              Some(symbol)
+            case _ =>
+              // printf("Not found...\n")
 
-                findWhile(key, cond, p, ss)
+              findWhile(key, cond, p, ss)
           }
         }
     }
@@ -321,7 +333,39 @@ class ScopeContext private (
   def lookupBefore(key: String, pos: Pos): Option[Symbol] = {
     // printf(s"lookupBefore($key, $pos)\n")
 
-    findWhile(key, _ => true, s => !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos))
+    findWhile(
+      key,
+      _ => true,
+      s => !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos)
+    )
+  }
+
+  /**
+    * Going back tracing the scope stack.
+    * Similar with [[findWhile]].
+    * Stop when meeting one of two conditions:
+    * 1. This symbol is declared in the current scope
+    * 2. The current lambda has captured this symbol
+    * (The order of condition needs to be considered.)
+    *
+    * @param v symbol needs capturing
+    * @param scopes the stack of scopes
+    */
+  def capture(v: LocalVarSymbol, scopes: List[Scope] = scopes): Unit = {
+    scopes match {
+      case Nil => None
+      case s :: ss =>
+        if (s.find(v.name).isEmpty) {
+          s match {
+            case fs: FormalScope =>
+              if (!fs.captured.contains(v)) {
+                fs.captured = v +: fs.captured
+                capture(v, ss)
+              }
+            case _ => capture(v, ss)
+          }
+        }
+    }
   }
 
   /**
@@ -339,15 +383,22 @@ class ScopeContext private (
     */
   def findConflict(key: String): Option[Symbol] = currentScope match {
     case s if s.isLocalOrFormal =>
-      findWhile(key, s => s.isLocalOrFormal || s.isLambda).orElse(global.find(key))
+      findWhile(key, s => s.isLocalOrFormal || s.isLambda)
+        .orElse(global.find(key))
     case _ => lookup(key)
   }
 
-  def findConflictBefore(key: String, pos: Pos): Option[Symbol] = currentScope match {
+  def findConflictBefore(key: String, pos: Pos): Option[Symbol] =
+    currentScope match {
       case s if s.isLocalOrFormal =>
-        findWhile(key, s => s.isLocalOrFormal || s.isLambda, s => !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos)).orElse(global.find(key))
+        findWhile(
+          key,
+          s => s.isLocalOrFormal || s.isLambda,
+          s =>
+            !((s.domain.isLocalOrFormal || s.domain.isLambda) && s.pos >= pos)
+        ).orElse(global.find(key))
       case _ => lookup(key)
-  }
+    }
 
   /**
     * Declare a symbol in the current scope.

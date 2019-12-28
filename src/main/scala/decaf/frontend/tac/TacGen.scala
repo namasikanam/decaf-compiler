@@ -34,7 +34,7 @@ class TacGen(implicit config: Config)
       clazz <- tree.classes
       method <- clazz.methods
     } yield {
-      printf(s"Transform (clazz $clazz, method $method)\n")
+      //   printf(s"Transform (clazz $clazz, method $method)\n")
 
       if (method.symbol.isMain) {
         val fv = pw.visitMainMethod
@@ -45,7 +45,8 @@ class TacGen(implicit config: Config)
 
         fv.visitEnd()
       } else {
-        val base = if (method.isStatic) 0 else 1 // arg 0 is reserved for `this`, when this is a member method
+        // val base = if (method.isStatic) 0 else 1 // arg 0 is reserved for `this`, when this is a member method
+        val base = 1 // The function object is always passed as the first argument
         val fv =
           pw.visitFunc(clazz.name, method.name, base + method.params.length)
         val ctx = new Context

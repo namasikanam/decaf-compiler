@@ -239,12 +239,13 @@ public final class Simulator {
 
         @Override
         public void visitLoadVTbl(TacInstr.LoadVTbl instr) {
-            System.out.println("visitLoadVTbl(instr = " + instr + ")");
+            // System.out.println("visitLoadVTbl(instr = " + instr + ")");
 
             var frame = _call_stack.peek();
             frame.array[instr.dst.index] = _vtable_to_addr.get(instr.vtbl.label.name);
 
-            System.out.println("Having loaded VTable, dst = " + frame.array[instr.dst.index]);
+            // System.out.println("Having loaded VTable, dst = " +
+            // frame.array[instr.dst.index]);
 
             _pc++;
         }
@@ -364,7 +365,7 @@ public final class Simulator {
 
         @Override
         public void visitDirectCall(TacInstr.DirectCall instr) {
-            System.out.println("DirectCall(instr = " + instr + ")");
+            // System.out.println("DirectCall(instr = " + instr + ")");
 
             // Save caller's state
             var frame = _call_stack.peek();
@@ -382,10 +383,11 @@ public final class Simulator {
                 _pc = _label_to_addr.get(instr.entry.name);
             }
 
-            if (instr.dst.isPresent()) {
-                System.out.println(
-                        "After call, instr.dst (" + instr.dst + ") = " + frame.array[instr.dst.get().index] + "\n");
-            }
+            // if (instr.dst.isPresent()) {
+            // System.out.println(
+            // "After call, instr.dst (" + instr.dst + ") = " +
+            // frame.array[instr.dst.get().index] + "\n");
+            // }
         }
 
         private void callIntrinsic(Intrinsic.Opcode opcode) {
@@ -426,25 +428,25 @@ public final class Simulator {
 
         @Override
         public void visitMemory(TacInstr.Memory instr) {
-            System.out.println("visitMemory(instr = " + instr + ")");
+            // System.out.println("visitMemory(instr = " + instr + ")");
 
             var frame = _call_stack.peek();
             int base = frame.array[instr.base.index];
             int offset = instr.offset;
 
-            System.out.println("base = " + base + ", offset = " + offset);
+            // System.out.println("base = " + base + ", offset = " + offset);
 
             switch (instr.op) {
             case LOAD:
                 frame.array[instr.dst.index] = _memory.load(base, offset);
 
-                System.out.println("The dst of LOAD is " + frame.array[instr.dst.index]);
+                // System.out.println("The dst of LOAD is " + frame.array[instr.dst.index]);
 
                 break;
             case STORE:
                 _memory.store(frame.array[instr.dst.index], base, offset);
 
-                System.out.println("The dst of STORE is " + frame.array[instr.dst.index]);
+                // System.out.println("The dst of STORE is " + frame.array[instr.dst.index]);
 
                 break;
             }

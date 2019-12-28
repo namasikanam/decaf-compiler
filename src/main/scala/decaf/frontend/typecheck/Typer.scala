@@ -328,7 +328,7 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
-    printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
+    // printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
 
     val err = ErrorTypeExpr(expr)
 
@@ -373,11 +373,9 @@ class Typer(implicit config: Config)
         val lctx = fctx.open(scope.nestedScope)
         val re = typeExpr(retExpr)(lctx)
         val typ = FunType(params.map(_.typeLit.typ), re.typ)
+        val expr = ExpressionLambda(params, re, scope)(typ)
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
-
-        // printf(s"At ${expr.pos}, Type ExpressionLambda: typ = ${typ}\n")
-
-        ExpressionLambda(params, re, scope)(typ)
+        expr
 
       case BlockLambda(params, block, scope) =>
         val fctx = ctx.open(scope)
@@ -394,8 +392,9 @@ class Typer(implicit config: Config)
           issue(new MissingReturnError(block.pos))
         if (retTyp == NoType) issue(new TypeIncompError(block.pos))
 
+        val expr = BlockLambda(params, b, scope)(typ)
         scope.owner.asInstanceOf[LambdaSymbol].typ = typ
-        BlockLambda(params, b, scope)(typ)
+        expr
 
       case UnTypedNewArray(elemType, length) =>
         val l = typeExpr(length)
@@ -673,7 +672,7 @@ class Typer(implicit config: Config)
   private def typeLValue(
       expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
-    printf(s"typeLValue(expr = $expr)\n")
+    // printf(s"typeLValue(expr = $expr)\n")
 
     val err = ErrorTypeLValue(expr)
 
@@ -689,6 +688,8 @@ class Typer(implicit config: Config)
           case Some(sym) if !initVars.contains(sym.name) =>
             sym match {
               case v: LocalVarSymbol =>
+                ctx.capture(v)
+
                 LocalVar(v)(v.typ)
               case v: MemberVarSymbol =>
                 if (ctx.currentMethod.isStatic) // member vars cannot be accessed in a static method

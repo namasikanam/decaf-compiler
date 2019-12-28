@@ -578,7 +578,7 @@ trait TreeTmpl {
     */
   case class ClassCast(obj: Expr, to: ClassRef)(implicit val annot: ExprAnnot)
       extends Expr
-  
+
   /**
     * Field selection, or simply a local variable.
     * {{{

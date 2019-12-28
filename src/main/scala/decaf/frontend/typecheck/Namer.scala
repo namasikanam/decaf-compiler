@@ -321,8 +321,8 @@ class Namer(implicit config: Config)
               case NoType => None
               case VoidType =>
                 v.typeLit match {
-                    case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
-                    case _ =>
+                  case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
+                  case _       =>
                 }
                 None
               case t =>
@@ -350,7 +350,7 @@ class Namer(implicit config: Config)
             val funType = FunType(typedParams.map(_.typeLit.typ), retType)
             val symbol =
               new MethodSymbol(m, funType, formalScope, ctx.currentClass)
-            
+
             // printf(s"Build MethodSymbol: the ownerMethod of scope of MethodSymbol $symbol is ${symbol.scope.ownerMethod}\n")
 
             ctx.declare(symbol)
@@ -383,11 +383,15 @@ class Namer(implicit config: Config)
     Typed.Block(ss)(localScope).setPos(block.pos)
   }
 
-  def resolveLValue(lValue: LValue)(implicit ctx: ScopeContext): Typed.LValue = {
+  def resolveLValue(
+      lValue: LValue
+  )(implicit ctx: ScopeContext): Typed.LValue = {
     val resolved = (lValue match {
-        case VarSel(None, id) => Typed.VarSel(None, id)(VarType)
-        case VarSel(Some(receiver), id) => Typed.VarSel(Some(resolveExpr(receiver)), id)(VarType)
-        case IndexSel(array, index) => Typed.IndexSel(resolveExpr(array), resolveExpr(index))(VarType)
+      case VarSel(None, id) => Typed.VarSel(None, id)(VarType)
+      case VarSel(Some(receiver), id) =>
+        Typed.VarSel(Some(resolveExpr(receiver)), id)(VarType)
+      case IndexSel(array, index) =>
+        Typed.IndexSel(resolveExpr(array), resolveExpr(index))(VarType)
     })
     resolved.setPos(lValue.pos)
   }
@@ -399,71 +403,80 @@ class Namer(implicit config: Config)
     // printf(s"At ${expr.pos}, resolveExpr $expr\n")
 
     val resolved = expr match {
-        case e: LValue => resolveLValue(e)
+      case e: LValue => resolveLValue(e)
 
-        case IntLit(v) => Typed.IntLit(v)(IntType)
-        case BoolLit(v) => Typed.BoolLit(v)(BoolType)
-        case StringLit(v) => Typed.StringLit(v)(StringType)
-        case NullLit() => Typed.NullLit()(NullType)
+      case IntLit(v)    => Typed.IntLit(v)(IntType)
+      case BoolLit(v)   => Typed.BoolLit(v)(BoolType)
+      case StringLit(v) => Typed.StringLit(v)(StringType)
+      case NullLit()    => Typed.NullLit()(NullType)
 
-        case ReadInt() => Typed.ReadInt()(IntType)
-        case ReadLine() => Typed.ReadLine()(StringType)
+      case ReadInt()  => Typed.ReadInt()(IntType)
+      case ReadLine() => Typed.ReadLine()(StringType)
 
-        case Unary(op, operand) => Typed.Unary(op, resolveExpr(operand))(VarType)
+      case Unary(op, operand) => Typed.Unary(op, resolveExpr(operand))(VarType)
 
-        case Binary(op, lhs, rhs) => Typed.Binary(op, resolveExpr(lhs), resolveExpr(rhs))(VarType)
+      case Binary(op, lhs, rhs) =>
+        Typed.Binary(op, resolveExpr(lhs), resolveExpr(rhs))(VarType)
 
-        case ExpressionLambda(params, retExpr, formalScope) =>
-            ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += formalScope
-            // open a formal scope and resolve all parameters of it
-            formalScope.ownerMethod = ctx.currentMethod
-            formalScope.lambdaFlag = true
-            val formalCtx = ctx.open(formalScope)
-            // resolve all parameters
-            val ps = params.flatMap{resolveLocalVarDef(_)(formalCtx, true)}
-            // open a nested lambda scope and resolve in it
-            val lambdaScope = new LambdaScope
-            formalScope.nestedScope = lambdaScope
-            val lambdaCtx = formalCtx.open(lambdaScope)
-            val re = resolveExpr(retExpr)(lambdaCtx)
-            // Create and declare the symbol
-            val typ = FunType(ps.map(_.typeLit.typ), VarType)
-            val symbol = new LambdaSymbol(typ, formalScope, expr.pos)
-            ctx.declare(symbol)
-            Typed.ExpressionLambda(ps, re, formalScope)(typ)
+      case ExpressionLambda(params, retExpr, formalScope) =>
+        ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += formalScope
+        // open a formal scope and resolve all parameters of it
+        formalScope.ownerMethod = ctx.currentMethod
+        formalScope.lambdaFlag = true
+        val formalCtx = ctx.open(formalScope)
+        // resolve all parameters
+        val ps = params.flatMap { resolveLocalVarDef(_)(formalCtx, true) }
+        // open a nested lambda scope and resolve in it
+        val lambdaScope = new LambdaScope
+        formalScope.nestedScope = lambdaScope
+        val lambdaCtx = formalCtx.open(lambdaScope)
+        val re = resolveExpr(retExpr)(lambdaCtx)
+        // Create and declare the symbol
+        val typ = FunType(ps.map(_.typeLit.typ), VarType)
+        val expr = Typed.ExpressionLambda(ps, re, formalScope)(typ)
+        val symbol = new LambdaSymbol(typ, formalScope, expr.pos)
+        ctx.declare(symbol)
+        expr
 
-        case BlockLambda(params, block, formalScope) =>
-            ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += formalScope
-            // open a formal scope and resolve all parameters of it
-            formalScope.ownerMethod = ctx.currentMethod
-            formalScope.lambdaFlag = true
-            val formalCtx = ctx.open(formalScope)
-            val ps = params.flatMap{resolveLocalVarDef(_)(formalCtx, true)}
-            // open a nested lambda scope and resolve in it
-            val lambdaScope = new LambdaScope
-            formalScope.nestedScope = lambdaScope
-            val lambdaCtx = formalCtx.open(lambdaScope)
-            val ss = block.stmts.map{ resolveStmt(_)(lambdaCtx) }
-            // Create and declare the symbol
-            val typ = FunType(ps.map(_.typeLit.typ), VarType)
-            val symbol = new LambdaSymbol(typ, formalScope, expr.pos)
-            val b = Typed.Block(ss)(lambdaScope).setPos(block.pos)
-            ctx.declare(symbol)
-            Typed.BlockLambda(ps, b, formalScope)(typ)
+      case BlockLambda(params, block, formalScope) =>
+        ctx.currentScope.asInstanceOf[LocalScope].nestedScopes += formalScope
+        // open a formal scope and resolve all parameters of it
+        formalScope.ownerMethod = ctx.currentMethod
+        formalScope.lambdaFlag = true
+        val formalCtx = ctx.open(formalScope)
+        val ps = params.flatMap { resolveLocalVarDef(_)(formalCtx, true) }
+        // open a nested lambda scope and resolve in it
+        val lambdaScope = new LambdaScope
+        formalScope.nestedScope = lambdaScope
+        val lambdaCtx = formalCtx.open(lambdaScope)
+        val ss = block.stmts.map { resolveStmt(_)(lambdaCtx) }
+        // Create and declare the symbol
+        val typ = FunType(ps.map(_.typeLit.typ), VarType)
+        val b = Typed.Block(ss)(lambdaScope).setPos(block.pos)
+        val expr = Typed.BlockLambda(ps, b, formalScope)(typ)
+        val symbol = new LambdaSymbol(typ, formalScope, expr.pos)
+        ctx.declare(symbol)
+        expr
 
-        case Call(fun, args) => Typed.Call(resolveExpr(fun), args.map(resolveExpr))(VarType)
+      case Call(fun, args) =>
+        Typed.Call(resolveExpr(fun), args.map(resolveExpr))(VarType)
 
-        case ClassTest(obj, clazz) => Typed.UnTypedClassTest(resolveExpr(obj), clazz)(VarType)
+      case ClassTest(obj, clazz) =>
+        Typed.UnTypedClassTest(resolveExpr(obj), clazz)(VarType)
 
-        case ClassCast(obj, clazz) => Typed.UnTypedClassCast(resolveExpr(obj), clazz)(VarType)
-        
-        case NewArray(elemType, length) => Typed.UnTypedNewArray(typeTypeLit(elemType), resolveExpr(length))(VarType)
+      case ClassCast(obj, clazz) =>
+        Typed.UnTypedClassCast(resolveExpr(obj), clazz)(VarType)
 
-        case NewClass(id) => Typed.UnTypedNewClass(id)(VarType)
+      case NewArray(elemType, length) =>
+        Typed.UnTypedNewArray(typeTypeLit(elemType), resolveExpr(length))(
+          VarType
+        )
 
-        case This() => Typed.This()(VarType)
+      case NewClass(id) => Typed.UnTypedNewClass(id)(VarType)
+
+      case This() => Typed.This()(VarType)
     }
-    
+
     resolved.setPos(expr.pos)
   }
 
@@ -471,28 +484,31 @@ class Namer(implicit config: Config)
     // printf(s"At ${stmt.pos}, resolveStmt $stmt\n")
 
     val resolved = stmt match {
-      case block: Block     => resolveBlock(block)
-      case v: LocalVarDef   => resolveLocalVarDef(v) match {
-        case Some(lv) => lv
-        case None => Typed.Skip()
-      }
-      case Assign(lhs, rhs) => Typed.Assign(resolveLValue(lhs), resolveExpr(rhs))
-      case ExprEval(expr)   => Typed.ExprEval(resolveExpr(expr))
-      case Skip()           => Typed.Skip()
+      case block: Block => resolveBlock(block)
+      case v: LocalVarDef =>
+        resolveLocalVarDef(v) match {
+          case Some(lv) => lv
+          case None     => Typed.Skip()
+        }
+      case Assign(lhs, rhs) =>
+        Typed.Assign(resolveLValue(lhs), resolveExpr(rhs))
+      case ExprEval(expr) => Typed.ExprEval(resolveExpr(expr))
+      case Skip()         => Typed.Skip()
       case If(cond, trueBranch, falseBranch) =>
         val t = resolveBlock(trueBranch)
         val f = falseBranch.map(resolveBlock)
         Typed.If(resolveExpr(cond), t, f)
-      case While(cond, body)             => Typed.While(resolveExpr(cond), resolveBlock(body))
+      case While(cond, body) =>
+        Typed.While(resolveExpr(cond), resolveBlock(body))
       case For(init, cond, update, body) =>
         // Since `init` and `update` may declare local variables, we must first open the local scope of `body`, and
         // then resolve `init`, `update` and statements inside `body`.
         val localScope = new LocalScope
         ctx.currentScope match {
-        case s: LambdaScope =>
+          case s: LambdaScope =>
             localScope.lambdaFlag = true
             s.nestedScopes += localScope
-        case s: LocalScope =>
+          case s: LocalScope =>
             s.nestedScopes += localScope
         }
         val localCtx = ctx.open(localScope)
@@ -502,11 +518,12 @@ class Namer(implicit config: Config)
         val ss = body.stmts.map { resolveStmt(_)(localCtx) }
         val b = Typed.Block(ss)(localScope).setPos(body.pos)
         Typed.For(i, c, u, b)
-      case Break()      => Typed.Break()
-      case Return(someExpr) => Typed.Return(someExpr match{
+      case Break() => Typed.Break()
+      case Return(someExpr) =>
+        Typed.Return(someExpr match {
           case Some(e) => Some(resolveExpr(e))
-          case None => None
-      })
+          case None    => None
+        })
       case Print(exprs) => Typed.Print(exprs.map(resolveExpr))
     }
     resolved.setPos(stmt.pos)
@@ -520,8 +537,8 @@ class Namer(implicit config: Config)
     // printf(s"initVars = $initVars\n")
 
     (ctx.findConflictBefore(v.name, v.pos) match {
-        case Some(earlier) => Some(earlier.pos)
-        case None => initVars.get(v.name)
+      case Some(earlier) => Some(earlier.pos)
+      case None          => initVars.get(v.name)
     }) match {
       case Some(earlierPos) =>
         // printf(s"At ${v.pos}, DeclConflictError occurs when resolving LocalVarDef\n")
@@ -541,10 +558,10 @@ class Namer(implicit config: Config)
             )(null)
           )
         } else {
-            v.init.map(resolveExpr)
-            None
+          v.init.map(resolveExpr)
+          None
         }
-        case None =>
+      case None =>
         initVars(v.name) = v.pos
         val init = v.init.map(resolveExpr)
         initVars -= v.name
@@ -559,14 +576,14 @@ class Namer(implicit config: Config)
             None
           case VoidType =>
             v.typeLit match {
-                case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
-                case _ =>
+              case TVoid() => issue(new BadVarTypeError(v.name, v.pos))
+              case _       =>
             }
             None
           case t =>
             val symbol = new LocalVarSymbol(v.name, t, v.pos)
             ctx.declare(symbol)
-            
+
             // printf("declare name = " + symbol.name + "\n")
 
             Some(

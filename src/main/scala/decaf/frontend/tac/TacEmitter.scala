@@ -7,7 +7,8 @@ import decaf.frontend.annot.{
   IntType,
   LocalVarSymbol,
   StringType,
-  FunType
+  FunType,
+  FormalScope
 }
 import decaf.frontend.tree.TreeNode
 import decaf.frontend.tree.TypedTree._
@@ -19,6 +20,7 @@ import decaf.util.Conversions._
 
 import scala.collection.mutable
 import scala.util.Random
+import scala.annotation.meta.param
 
 /**
   * Helper methods for TAC emission.
@@ -199,7 +201,10 @@ trait TacEmitter {
         fv.visitLoadFrom(at, -4)
 
       case NewClass(clazz) => fv.visitNewClass(clazz.name)
-      case This()          => fv.getArgTemp(0)
+
+      case This() =>
+        val _T0 = fv.getArgTemp(0)
+        fv.visitLoadFrom(_T0, 4)
 
       case MemberVar(receiver, variable) =>
         val rt = emitExpr(receiver)
@@ -302,28 +307,148 @@ trait TacEmitter {
         // expr.val = result
         result
 
-      // case ExpressionLambda(params, expr, scope) =>
-      // TODO: write this case similar to the above two cases
+      case ExpressionLambda(params, expr, scope) =>
+        // 記錄當前是在這個Lambda中 // 此時不再需要棧了
+        val pastFormalScope = currentFormalScope
+        currentFormalScope = Some(scope)
 
-      // case BlockLamda(params, block, scope) =>
-      // TODO: write this case similar to the above case
+        // newFv = fv.freshFunc(隨便起個名字，函數類型的參數數量 + 1)
+        val lambdaName = "lambda:(" + params + ")=>" + expr + "@" + Random.alphanumeric
+          .take(10)
+          .mkString
+
+        val newFv = fv.freshFunc(
+          lambdaName,
+          params.size() + 2
+        )
+
+        var ctxLambda = ctx
+        var i = 0
+        for (i <- 0 to params.size() - 1) {
+          ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 2))
+        }
+        for (i <- 0 to params.size() - 1) {
+          ctxLambda.vars.update(
+            params(i).symbol,
+            newFv.visitLoadFrom(newFv.getArgTemp(0), 8 + i * 4)
+          )
+        }
+
+        // 在 newFv 中生成 expr 的 TAC 代碼
+        emitExpr(expr)(ctxLambda, newFv)
+
+        // newFv.visitEnd()
+        newFv.visitEnd()
+
+        // 在 fv 中生成 result = ALLOCATE(4 * 被捕獲的變量數 + 8)
+        val result_length = fv.visitLoad(4 * scope.captured.size() + 8)
+        val result =
+          fv.visitIntrinsicCall(Intrinsic.ALLOCATE, true, result_length)
+
+        // 在 fv 中生成 func = 從新虛表中獲取新生成的函數，這需要一個偏移量，你應該在前幾步中把它維護好
+        val func = fv.visitFunction(lambdaName)
+
+        // 在 fv 中生成 *(result + 0) = func
+        fv.visitStoreTo(result, 0, func)
+
+        // 在 fv 中生成 *(result + 4) = this
+        // 如果 this 存在，其必然在這裡；對於 this 不存在的情況，則保存 this 無意義
+        val _T0 = fv.getArgTemp(0)
+        val this_ = fv.visitLoadFrom(_T0, 4)
+        fv.visitStoreTo(result, 4, this_)
+
+        // for i in 0..被捕獲的變量數
+        //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量
+        for (i <- 0 to scope.captured.size() - 1) {
+          fv.visitStoreTo(result, i * 4 + 8, ctx.vars(scope.captured(i)))
+        }
+
+        // 記錄當前是在原來的lambda中
+        currentFormalScope = pastFormalScope
+
+        // expr.val = result
+        result
+
+      case BlockLambda(params, block, scope) =>
+        // 記錄當前是在這個Lambda中 // 此時不再需要棧了
+
+        val pastFormalScope = currentFormalScope
+        currentFormalScope = Some(scope)
+
+        // newFv = fv.freshFunc(隨便起個名字，函數類型的參數數量 + 1)
+        val lambdaName = "lambda:(" + params + ")=>" + expr + "@" + Random.alphanumeric
+          .take(10)
+          .mkString
+
+        val newFv = fv.freshFunc(
+          lambdaName,
+          params.size() + 2
+        )
+
+        var ctxLambda = ctx
+        var i = 0
+        for (i <- 0 to params.size() - 1) {
+          ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 2))
+        }
+        for (i <- 0 to params.size() - 1) {
+          ctxLambda.vars.update(
+            params(i).symbol,
+            newFv.visitLoadFrom(newFv.getArgTemp(0), 8 + i * 4)
+          )
+        }
+
+        // 在 newFv 中生成 expr 的 TAC 代碼
+        emitStmt(block)(ctxLambda, Nil, newFv)
+
+        // newFv.visitEnd()
+        newFv.visitEnd()
+
+        // 在 fv 中生成 result = ALLOCATE(4 * 被捕獲的變量數 + 8)
+        val result_length = fv.visitLoad(4 * scope.captured.size() + 8)
+        val result =
+          fv.visitIntrinsicCall(Intrinsic.ALLOCATE, true, result_length)
+
+        // 在 fv 中生成 func = 從新虛表中獲取新生成的函數，這需要一個偏移量，你應該在前幾步中把它維護好
+        val func = fv.visitFunction(lambdaName)
+
+        // 在 fv 中生成 *(result + 0) = func
+        fv.visitStoreTo(result, 0, func)
+
+        // 在 fv 中生成 *(result + 4) = this
+        // 如果 this 存在，其必然在這裡；對於 this 不存在的情況，則保存 this 無意義
+        val _T0 = fv.getArgTemp(0)
+        val this_ = fv.visitLoadFrom(_T0, 4)
+        fv.visitStoreTo(result, 4, this_)
+
+        // for i in 0..被捕獲的變量數
+        //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量
+        for (i <- 0 to scope.captured.size() - 1) {
+          fv.visitStoreTo(result, i * 4 + 8, ctx.vars(scope.captured(i)))
+        }
+
+        // 記錄當前是在原來的lambda中
+        currentFormalScope = pastFormalScope
+
+        // expr.val = result
+        result
 
       case MemberCall(receiver, method, args) =>
-        val rv = emitExpr(receiver)
+        val func = emitExpr(MemberMethod(receiver, method)(method.typ))
         val as = args.map(emitExpr)
         if (method.typ.ret.isVoidType) {
-          fv.visitMemberCall(rv, method.owner.name, method.name, as)
+          fv.visitFunctionCall(func, as)
           null
         } else {
-          fv.visitMemberCall(rv, method.owner.name, method.name, as, true)
+          fv.visitFunctionCall(func, as, true)
         }
       case StaticCall(method, args) =>
+        val func = emitExpr(StaticMethod(method.owner, method)(method.typ))
         val as = args.map(emitExpr)
         if (method.typ.ret.isVoidType) {
-          fv.visitStaticCall(method.owner.name, method.name, as)
+          fv.visitFunctionCall(func, as)
           null
         } else {
-          fv.visitStaticCall(method.owner.name, method.name, as, true)
+          fv.visitFunctionCall(func, as, true)
         }
 
       case FunctionCall(function, args) =>
@@ -617,4 +742,6 @@ trait TacEmitter {
     fv.visitLabel(exit)
     ret
   }
+
+  var currentFormalScope: Option[FormalScope] = None
 }
