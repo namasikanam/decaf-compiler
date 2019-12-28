@@ -143,7 +143,8 @@ public final class Simulator {
     private Map<String, Integer> _vtable_to_addr;
 
     /**
-     * Simulate instruction memory. The "address" is simply the index of this vector.
+     * Simulate instruction memory. The "address" is simply the index of this
+     * vector.
      */
     private Vector<TacInstr> _instrs;
 
@@ -168,8 +169,8 @@ public final class Simulator {
     private Stack<Frame> _call_stack;
 
     /**
-     * Temporarily save the actual arguments given by the PARM instruction. These will be erased once a new stack
-     * is created.
+     * Temporarily save the actual arguments given by the PARM instruction. These
+     * will be erased once a new stack is created.
      */
     private Vector<Integer> _actual_args;
 
@@ -203,7 +204,8 @@ public final class Simulator {
         Temp retValDst;
 
         /**
-         * Save: the address of the next instruction to be executed once the function call returns.
+         * Save: the address of the next instruction to be executed once the function
+         * call returns.
          */
         int pcNext;
 
@@ -237,8 +239,12 @@ public final class Simulator {
 
         @Override
         public void visitLoadVTbl(TacInstr.LoadVTbl instr) {
+            System.out.println("visitLoadVTbl(instr = " + instr + ")");
+
             var frame = _call_stack.peek();
             frame.array[instr.dst.index] = _vtable_to_addr.get(instr.vtbl.label.name);
+
+            System.out.println("Having loaded VTable, dst = " + frame.array[instr.dst.index]);
 
             _pc++;
         }
@@ -265,8 +271,8 @@ public final class Simulator {
             var frame = _call_stack.peek();
             int operand = frame.array[instr.operand.index];
             frame.array[instr.dst.index] = switch (instr.op) {
-                case NEG -> -operand;
-                case LNOT -> (operand == 0) ? 1 : 0;
+            case NEG -> -operand;
+            case LNOT -> (operand == 0) ? 1 : 0;
             };
 
             _pc++;
@@ -278,19 +284,19 @@ public final class Simulator {
             var lhs = frame.array[instr.lhs.index];
             var rhs = frame.array[instr.rhs.index];
             frame.array[instr.dst.index] = switch (instr.op) {
-                case ADD -> lhs + rhs;
-                case SUB -> lhs - rhs;
-                case MUL -> lhs * rhs;
-                case DIV -> lhs / rhs;
-                case MOD -> lhs % rhs;
-                case EQU -> (lhs == rhs) ? 1 : 0;
-                case NEQ -> (lhs != rhs) ? 1 : 0;
-                case LES -> (lhs < rhs) ? 1 : 0;
-                case LEQ -> (lhs <= rhs) ? 1 : 0;
-                case GTR -> (lhs > rhs) ? 1 : 0;
-                case GEQ -> (lhs >= rhs) ? 1 : 0;
-                case LAND -> (lhs == 0) ? 0 : (rhs == 0) ? 0 : 1;
-                case LOR -> (lhs != 0) ? 1 : (rhs == 0) ? 0 : 1;
+            case ADD -> lhs + rhs;
+            case SUB -> lhs - rhs;
+            case MUL -> lhs * rhs;
+            case DIV -> lhs / rhs;
+            case MOD -> lhs % rhs;
+            case EQU -> (lhs == rhs) ? 1 : 0;
+            case NEQ -> (lhs != rhs) ? 1 : 0;
+            case LES -> (lhs < rhs) ? 1 : 0;
+            case LEQ -> (lhs <= rhs) ? 1 : 0;
+            case GTR -> (lhs > rhs) ? 1 : 0;
+            case GEQ -> (lhs >= rhs) ? 1 : 0;
+            case LAND -> (lhs == 0) ? 0 : (rhs == 0) ? 0 : 1;
+            case LOR -> (lhs != 0) ? 1 : (rhs == 0) ? 0 : 1;
             };
 
             _pc++;
@@ -305,8 +311,8 @@ public final class Simulator {
         public void visitCondBranch(TacInstr.CondBranch instr) {
             var frame = _call_stack.peek();
             var jump = switch (instr.op) {
-                case BEQZ -> frame.array[instr.cond.index] == 0;
-                case BNEZ -> frame.array[instr.cond.index] != 0;
+            case BEQZ -> frame.array[instr.cond.index] == 0;
+            case BNEZ -> frame.array[instr.cond.index] != 0;
             };
 
             if (jump) {
@@ -358,6 +364,8 @@ public final class Simulator {
 
         @Override
         public void visitDirectCall(TacInstr.DirectCall instr) {
+            System.out.println("DirectCall(instr = " + instr + ")");
+
             // Save caller's state
             var frame = _call_stack.peek();
             frame.pcNext = _pc + 1;
@@ -373,6 +381,11 @@ public final class Simulator {
                 _call_stack.push(new Frame(func));
                 _pc = _label_to_addr.get(instr.entry.name);
             }
+
+            if (instr.dst.isPresent()) {
+                System.out.println(
+                        "After call, instr.dst (" + instr.dst + ") = " + frame.array[instr.dst.get().index] + "\n");
+            }
         }
 
         private void callIntrinsic(Intrinsic.Opcode opcode) {
@@ -380,32 +393,32 @@ public final class Simulator {
             Optional<Integer> retVal = Optional.empty();
 
             switch (opcode) {
-                case ALLOCATE -> retVal = Optional.of(_memory.alloc(frame.array[0]));
-                case READ_LINE -> {
-                    var scanner = new Scanner(_in);
-                    var str = scanner.nextLine();
-                    assert str.length() <= 63;
-                    retVal = Optional.of(_string_pool.add(str));
-                }
-                case READ_INT -> {
-                    var scanner = new Scanner(_in);
-                    var value = scanner.nextInt();
-                    retVal = Optional.of(value);
-                }
-                case STRING_EQUAL -> retVal = Optional.of(frame.array[0] == frame.array[1] ? 1 : 0);
-                case PRINT_INT -> {
-                    _out.print(frame.array[0]);
-                    _out.flush();
-                }
-                case PRINT_STRING -> {
-                    _out.print(_string_pool.get(frame.array[0]));
-                    _out.flush();
-                }
-                case PRINT_BOOL -> {
-                    _out.print(frame.array[0] == 0 ? "false" : "true");
-                    _out.flush();
-                }
-                case HALT -> _halt = true;
+            case ALLOCATE -> retVal = Optional.of(_memory.alloc(frame.array[0]));
+            case READ_LINE -> {
+                var scanner = new Scanner(_in);
+                var str = scanner.nextLine();
+                assert str.length() <= 63;
+                retVal = Optional.of(_string_pool.add(str));
+            }
+            case READ_INT -> {
+                var scanner = new Scanner(_in);
+                var value = scanner.nextInt();
+                retVal = Optional.of(value);
+            }
+            case STRING_EQUAL -> retVal = Optional.of(frame.array[0] == frame.array[1] ? 1 : 0);
+            case PRINT_INT -> {
+                _out.print(frame.array[0]);
+                _out.flush();
+            }
+            case PRINT_STRING -> {
+                _out.print(_string_pool.get(frame.array[0]));
+                _out.flush();
+            }
+            case PRINT_BOOL -> {
+                _out.print(frame.array[0] == 0 ? "false" : "true");
+                _out.flush();
+            }
+            case HALT -> _halt = true;
             }
 
             returnWith(retVal);
@@ -413,12 +426,27 @@ public final class Simulator {
 
         @Override
         public void visitMemory(TacInstr.Memory instr) {
+            System.out.println("visitMemory(instr = " + instr + ")");
+
             var frame = _call_stack.peek();
             int base = frame.array[instr.base.index];
             int offset = instr.offset;
+
+            System.out.println("base = " + base + ", offset = " + offset);
+
             switch (instr.op) {
-                case LOAD -> frame.array[instr.dst.index] = _memory.load(base, offset);
-                case STORE -> _memory.store(frame.array[instr.dst.index], base, offset);
+            case LOAD:
+                frame.array[instr.dst.index] = _memory.load(base, offset);
+
+                System.out.println("The dst of LOAD is " + frame.array[instr.dst.index]);
+
+                break;
+            case STORE:
+                _memory.store(frame.array[instr.dst.index], base, offset);
+
+                System.out.println("The dst of STORE is " + frame.array[instr.dst.index]);
+
+                break;
             }
 
             _pc++;

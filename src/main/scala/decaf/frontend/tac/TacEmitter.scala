@@ -205,18 +205,62 @@ trait TacEmitter {
         val rt = emitExpr(receiver)
         fv.visitMemberAccess(rt, variable.owner.name, variable.name)
 
-      // case MemberMethod(receiver, method) =>
-      // TODO: modify according to the documentation of Chenhao Li
-      // val r = emitExpr(receiver)
-      // fv.visitMemberAccess(r, method.owner.name, method.name)
+      case MemberMethod(receiver, method) =>
+        // 访问 expr.receiver
+        val rcvr = emitExpr(receiver)
+
+        // newMv = mv.freshFunc(随便起个名字，函数类型的参数数量 + 1);
+        val methodName = "member:(" + rcvr.toString + ")." + method.name + "@" + Random.alphanumeric
+          .take(10)
+          .mkString
+        val newFv = fv.freshFunc(methodName, method.typ.args.length + 1)
+
+        // 在 newMv 中生成 this_ = *(_T0 + 4)
+        // _T0 是函数对象，偏移量4处存储的是一个对象指针
+        val this_ = newFv.visitLoadFrom(newFv.getArgTemp(0), 4)
+
+        // args = ArrayList{_T1, ..., _T{函数类型的参数数量}}
+        val args = List
+          .range(1, method.typ.args.length + 1)
+          .map((i: Int) => newFv.getArgTemp(i))
+
+        if (method.typ.ret.isVoidType) {
+          newFv.visitMemberCall(this_, method.owner.name, method.name, args)
+        } else {
+          // ret = newMv.visitMemberCall(this_, 类名字, 函数名字, args, true) // 这调用的是普通函数，所以可以参考原来的调用普通函数的代码
+          val ret = newFv.visitMemberCall(
+            this_,
+            method.owner.name,
+            method.name,
+            args,
+            true
+          )
+          // 在 newMv 中生成 return ret
+          newFv.visitReturn(ret)
+        }
+
+        // newMv.visitEnd()
+        newFv.visitEnd()
+
+        // 在 mv 中生成 result = ALLOCATE(8)
+        val eight = fv.visitLoad(8)
+        val result = fv.visitIntrinsicCall(Intrinsic.ALLOCATE, true, eight)
+
+        // 在 mv 中生成 func = 从新虚表中获取新生成的函数，这需要一个偏移量，你应该在前几步中把它维护好
+        // 依据文档，这里需要存一个函数指针
+        val func = fv.visitFunction(methodName)
+
+        // 在 mv 中生成 *(result + 0) = func
+        fv.visitStoreTo(result, 0, func)
+
+        // 在 mv 中生成 *(result + 4) = expr.receiver
+        fv.visitStoreTo(result, 4, rcvr)
+
+        // expr.val = result
+        result
 
       case StaticMethod(owner, method) =>
-        // TODO: transform the natural language written by Chenhao Li to correct formal language
-
-        // 访问 expr.receiver
-        // Q: 什么是 expr.receiver？
-
-        // Not sure if this is needed to be saved somewhere
+        // newFv = fv.freshFunc(随便起个名字，函数类型的参数数量)
         val methodName = "static:" + owner.name + "." + method.name + "@" + Random.alphanumeric
           .take(10)
           .mkString
@@ -226,30 +270,35 @@ trait TacEmitter {
           method.typ.args.size()
         )
 
-        implicit val ctx = new Context
-        method.params.zipWithIndex.foreach {
-          case (p, i) => ctx.vars(p.symbol) = newFv.getArgTemp(i)
+        // args = ArrayList{_T0, ..., _T{函数类型的参数数量 - 1}}
+        val args = List
+          .range(0, method.typ.args.length)
+          .map((i: Int) => newFv.getArgTemp(i))
+
+        if (method.typ.ret.isVoidType) {
+          // ret = newFv.visitStaticCall(, args, true) // 这调⽤的是普通函数，所以可以参考原来的调⽤普通函数的代码
+          newFv.visitStaticCall(owner.name, method.name, args)
+        } else {
+          // ret = newFv.visitStaticCall(, args, true) // 这调⽤的是普通函数，所以可以参考原来的调⽤普通函数的代码
+          val ret = newFv.visitStaticCall(owner.name, method.name, args, true)
+          // 在 newFv 中⽣成 return ret
+          newFv.visitReturn(ret)
         }
-        newFv.StaticCall()
 
-        // ret = newMv.visitStaticCall(, args, true) // 这调⽤的是普通函数，所以可以参考原来的调⽤普通函数的代码
-
-        // 在newMv中⽣成 return ret
-        emitStmt(method.body)(ctx, Nil, newFv)
-
+        // newFv.visitEnd()
         newFv.visitEnd()
 
-        // 在mv中⽣成 result = ALLOCATE(8)
-        val result = fv.visitIntrinsicCall(Intrinsic.ALLOCATE, true, 8);
-
-        // 在mv中⽣成 获取新虚表
+        // 在 fv 中⽣成 result = ALLOCATE(4)
+        val four = fv.visitLoad(4)
+        val result = fv.visitIntrinsicCall(Intrinsic.ALLOCATE, true, four);
 
         // 在mv中⽣成 func = 从新虚表中获取新生成的函数，这需要一个偏移量，你应该在前几步中把它维护好
+        val func = fv.visitFunction(methodName)
 
         // 在mv中⽣成 *(result + 0) = func
+        fv.visitStoreTo(result, 0, func)
 
-        // 在mv中⽣成 *(result + 4) = expr.receiver
-
+        // expr.val = result
         result
 
       // case ExpressionLambda(params, expr, scope) =>
@@ -285,7 +334,7 @@ trait TacEmitter {
         val as = args.map(emitExpr)
 
         // 将 ret 保存到 expr.val 中
-        if (func.typ.asInstanceOf[FunType].ret.isVoidType) {
+        if (function.typ.asInstanceOf[FunType].ret.isVoidType) {
           fv.visitFunctionCall(func, as)
           null
         } else {

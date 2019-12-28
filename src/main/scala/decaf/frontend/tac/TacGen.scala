@@ -34,6 +34,8 @@ class TacGen(implicit config: Config)
       clazz <- tree.classes
       method <- clazz.methods
     } yield {
+      printf(s"Transform (clazz $clazz, method $method)\n")
+
       if (method.symbol.isMain) {
         val fv = pw.visitMainMethod
 

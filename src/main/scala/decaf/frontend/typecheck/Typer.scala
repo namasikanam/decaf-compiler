@@ -328,7 +328,7 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
-    // printf(s"At testExpr(expr = $expr) at ${expr.pos}\n")
+    printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
 
     val err = ErrorTypeExpr(expr)
 
@@ -570,7 +570,12 @@ class Typer(implicit config: Config)
                             }
                             e
                         }
-                        MemberCall(This(), m, as)(ret)
+
+                        if (m.isStatic) {
+                          StaticCall(m, as)(ret)
+                        } else {
+                          MemberCall(This(), m, as)(ret)
+                        }
                     }
                   case _ =>
                     issue(new UndeclVarError(method, method.pos)); err
@@ -668,7 +673,7 @@ class Typer(implicit config: Config)
   private def typeLValue(
       expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
-    // printf(s"typeLValue(expr = $expr)\n")
+    printf(s"typeLValue(expr = $expr)\n")
 
     val err = ErrorTypeLValue(expr)
 

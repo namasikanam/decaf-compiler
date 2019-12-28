@@ -43,15 +43,15 @@ public class ProgramWriter {
             buildVTableFor(clazz);
         }
 
-        // Build the special virtual table
-        nameOfGlobalVTable = "GlobalVTable@" + UUID.randomUUID().toString();
-        buildVTableFor(new ClassInfo(nameOfGlobalVTable, Optional.empty(), new HashSet<String>(), new HashSet<String>(),
-                new HashSet<String>(), false));
-
         // Create the `new` method for every class.
         for (var clazz : classes.values()) {
             createConstructorFor(clazz.name);
         }
+
+        // Build a special virtual table
+        nameOfGlobalVTable = "GlobalVTable@" + UUID.randomUUID().toString();
+        buildVTableFor(new ClassInfo(nameOfGlobalVTable, Optional.empty(), new HashSet<String>(), new HashSet<String>(),
+                new HashSet<String>(), false));
     }
 
     /**
@@ -197,6 +197,10 @@ public class ProgramWriter {
             return vtables.get(clazz);
         }
 
+        VTable getVTable() {
+            return vtables.get(nameOfGlobalVTable);
+        }
+
         boolean hasVTable(String clazz) {
             return vtables.containsKey(clazz);
         }
@@ -211,6 +215,10 @@ public class ProgramWriter {
 
         int getOffset(String clazz, String member) {
             return offsets.get(clazz + "." + member);
+        }
+
+        int getOffset(String member) {
+            return offsets.get(nameOfGlobalVTable + "." + member);
         }
 
         void putOffsets(VTable vtbl) {

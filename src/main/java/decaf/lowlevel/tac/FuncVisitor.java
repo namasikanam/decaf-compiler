@@ -69,6 +69,17 @@ public class FuncVisitor {
     }
 
     /**
+     * Append {@link TacInstr.LoadVTbl}.
+     *
+     * @return a fresh temp, the special vtable
+     */
+    public Temp visitLoadVTable() {
+        var temp = freshTemp();
+        func.add(new TacInstr.LoadVTbl(temp, ctx.getVTable()));
+        return temp;
+    }
+
+    /**
      * Append {@link TacInstr.Unary}.
      *
      * @param op      unary operator, see {@link TacInstr.Unary.Op}
@@ -275,7 +286,7 @@ public class FuncVisitor {
         var entry = visitLoadFrom(function);
 
         // 生成 parm func
-        func.add(new TacInstr.Parm(entry));
+        func.add(new TacInstr.Parm(function));
 
         // for arg in args
         for (var arg : args) {
@@ -386,6 +397,17 @@ public class FuncVisitor {
      */
     public void visitLabel(Label label) {
         func.add(new TacInstr.Mark(label));
+    }
+
+    /**
+     * Return the function pointer in the special vtable
+     * 
+     * @param functionName
+     */
+    public Temp visitFunction(String functionName) {
+        // 在 mv 中生成 获取新虚表
+        var vtbl = visitLoadVTable();
+        return visitLoadFrom(vtbl, ctx.getOffset(functionName));
     }
 
     /**
