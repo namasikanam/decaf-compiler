@@ -17,6 +17,8 @@ public class FuncVisitor {
      * @param src source temp
      */
     public void visitAssign(Temp dst, Temp src) {
+        System.out.println("visitAssign(dst = " + dst + ", src = " + src + ")\n");
+
         func.add(new TacInstr.Assign(dst, src));
     }
 

@@ -239,13 +239,12 @@ public final class Simulator {
 
         @Override
         public void visitLoadVTbl(TacInstr.LoadVTbl instr) {
-            // System.out.println("visitLoadVTbl(instr = " + instr + ")");
+            System.out.println("visitLoadVTbl(instr = " + instr + ")");
 
             var frame = _call_stack.peek();
             frame.array[instr.dst.index] = _vtable_to_addr.get(instr.vtbl.label.name);
 
-            // System.out.println("Having loaded VTable, dst = " +
-            // frame.array[instr.dst.index]);
+            System.out.println("Having loaded VTable, dst = " + frame.array[instr.dst.index]);
 
             _pc++;
         }

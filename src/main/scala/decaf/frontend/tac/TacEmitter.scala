@@ -46,6 +46,9 @@ trait TacEmitter {
   def emitStmt(
       stmt: Stmt
   )(implicit ctx: Context, loopExits: List[Label], fv: FuncVisitor): Unit = {
+    printf(s"At ${stmt.pos}, stmt = $stmt\n")
+    printf(s"ctx.vars = ${ctx.vars}\n")
+
     stmt match {
       case Block(stmts) => stmts.foreach(emitStmt)
 
@@ -190,7 +193,11 @@ trait TacEmitter {
 
       case NewArray(_, length) =>
         val lt = emitExpr(length)
-        emitArrayInit(lt)
+        val eai = emitArrayInit(lt)
+
+        printf(s"emitArrayInit(_) = $eai\n")
+
+        eai
       case IndexSel(array, index) =>
         val at = emitExpr(array)
         val it = emitExpr(index)
@@ -328,7 +335,8 @@ trait TacEmitter {
           params.size() + 1
         )
 
-        var ctxLambda = ctx
+        var ctxLambda = new Context
+        ctxLambda.vars = ctx.vars.clone()
         var i = 0
         for (i <- 0 to params.size() - 1) {
           ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 1))
@@ -400,7 +408,8 @@ trait TacEmitter {
           params.size() + 1
         )
 
-        var ctxLambda = ctx
+        var ctxLambda = new Context
+        ctxLambda.vars = ctx.vars.clone()
         var i = 0
         for (i <- 0 to params.size() - 1) {
           ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 1))
@@ -446,10 +455,14 @@ trait TacEmitter {
         // for i in 0..被捕獲的變量數
         //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量
         for (i <- 0 to scope.captured.size() - 1) {
+          printf(
+            s"captured(${scope.captured(i)}) = ${ctx.vars(scope.captured(i))}\n"
+          );
+
           fv.visitStoreTo(result, i * 4 + 8, ctx.vars(scope.captured(i)))
         }
 
-        // 記錄當前是在原來的lambda中
+        // 記錄當前是在原來的 lambda 中
         currentFormalScope = pastFormalScope
 
         // expr.val = result
