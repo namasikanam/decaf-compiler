@@ -17,7 +17,7 @@ public class FuncVisitor {
      * @param src source temp
      */
     public void visitAssign(Temp dst, Temp src) {
-        System.out.println("visitAssign(dst = " + dst + ", src = " + src + ")\n");
+        // System.out.println("visitAssign(dst = " + dst + ", src = " + src + ")\n");
 
         func.add(new TacInstr.Assign(dst, src));
     }
@@ -216,7 +216,7 @@ public class FuncVisitor {
      * @return the fresh temp if we need return (or else null)
      */
     public Temp visitMemberCall(Temp object, String clazz, String method, List<Temp> args, boolean needReturn) {
-        System.out.println("visitMemberCall(object, clazz = " + clazz + ", method = " + method + ", args, needReturn)");
+        // System.out.println("visitMemberCall(object, clazz = " + clazz + ", method = " + method + ", args, needReturn)");
 
         Temp temp = null;
         var vtbl = visitLoadFrom(object);

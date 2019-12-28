@@ -46,8 +46,8 @@ trait TacEmitter {
   def emitStmt(
       stmt: Stmt
   )(implicit ctx: Context, loopExits: List[Label], fv: FuncVisitor): Unit = {
-    printf(s"At ${stmt.pos}, stmt = $stmt\n")
-    printf(s"ctx.vars = ${ctx.vars}\n")
+    // printf(s"At ${stmt.pos}, stmt = $stmt\n")
+    // printf(s"ctx.vars = ${ctx.vars}\n")
 
     stmt match {
       case Block(stmts) => stmts.foreach(emitStmt)
@@ -127,7 +127,7 @@ trait TacEmitter {
     * @return a temp storing the value of this expression
     */
   def emitExpr(expr: Expr)(implicit ctx: Context, fv: FuncVisitor): Temp = {
-    printf(s"At ${expr.pos}, emitExpr(expr = $expr)\n")
+    // printf(s"At ${expr.pos}, emitExpr(expr = $expr)\n")
 
     expr match {
       case IntLit(value)    => fv.visitLoad(value)
@@ -195,7 +195,7 @@ trait TacEmitter {
         val lt = emitExpr(length)
         val eai = emitArrayInit(lt)
 
-        printf(s"emitArrayInit(_) = $eai\n")
+        // printf(s"emitArrayInit(_) = $eai\n")
 
         eai
       case IndexSel(array, index) =>
@@ -225,7 +225,7 @@ trait TacEmitter {
         // 访问 expr.receiver
         val rcvr = emitExpr(receiver)
 
-        printf(s"At ${expr.pos}, MemberMethod($receiver, $method)\n")
+        // printf(s"At ${expr.pos}, MemberMethod($receiver, $method)\n")
 
         // newMv = mv.freshFunc(随便起个名字，函数类型的参数数量 + 1);
         val methodName = "member:(" + rcvr.toString + ")." + method.name + "@" + Random.alphanumeric
@@ -321,7 +321,7 @@ trait TacEmitter {
         result
 
       case ExpressionLambda(params, expr, scope) =>
-        printf(s"captured = ${scope.captured}\n")
+        // printf(s"captured = ${scope.captured}\n")
 
         // 記錄當前是在這個Lambda中 // 此時不再需要棧了
         val pastFormalScope = currentFormalScope
@@ -457,9 +457,9 @@ trait TacEmitter {
         // for i in 0..被捕獲的變量數
         //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量
         for (i <- 0 to scope.captured.size() - 1) {
-          printf(
-            s"captured(${scope.captured(i)}) = ${ctx.vars(scope.captured(i))}\n"
-          );
+        //   printf(
+        //     s"captured(${scope.captured(i)}) = ${ctx.vars(scope.captured(i))}\n"
+        //   );
 
           fv.visitStoreTo(result, i * 4 + 8, ctx.vars(scope.captured(i)))
         }

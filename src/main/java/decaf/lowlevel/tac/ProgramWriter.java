@@ -233,7 +233,7 @@ public class ProgramWriter {
 
             offset = 4;
             for (var variable : vtbl.memberVariables) {
-                System.out.println("Put variable " + prefix + variable);
+                // System.out.println("Put variable " + prefix + variable);
 
                 offsets.put(prefix + variable, offset);
                 offset += 4;

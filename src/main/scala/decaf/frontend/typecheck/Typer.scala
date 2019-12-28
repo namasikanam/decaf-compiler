@@ -328,7 +328,7 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
-    printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
+    // printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
 
     val err = ErrorTypeExpr(expr)
 
@@ -530,7 +530,7 @@ class Typer(implicit config: Config)
                             e
                         }
                         
-                        printf(s"Try to capture ${v}\n")
+                        // printf(s"Try to capture ${v}\n")
 
                         ctx.capture(v)
 
@@ -704,7 +704,7 @@ class Typer(implicit config: Config)
   private def typeLValue(
       expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
-    printf(s"At ${expr.pos}, typeLValue(expr = $expr)\n")
+    // printf(s"At ${expr.pos}, typeLValue(expr = $expr)\n")
 
     val err = ErrorTypeLValue(expr)
 
@@ -720,7 +720,7 @@ class Typer(implicit config: Config)
           case Some(sym) if !initVars.contains(sym.name) =>
             sym match {
               case v: LocalVarSymbol =>
-                printf(s"Try to capture ${v}\n")
+                // printf(s"Try to capture ${v}\n")
 
                 ctx.capture(v)
 
@@ -738,9 +738,9 @@ class Typer(implicit config: Config)
                   }
                 MemberVar(This(), v)(v.typ)
               case m: MethodSymbol =>
-                printf(
-                  s"Find a MethodSymbol $m, m.isStatic = ${m.isStatic}, ctx.currentMethod.isStatic = ${ctx.currentMethod.isStatic}\n"
-                )
+                // printf(
+                //   s"Find a MethodSymbol $m, m.isStatic = ${m.isStatic}, ctx.currentMethod.isStatic = ${ctx.currentMethod.isStatic}\n"
+                // )
 
                 if (!m.isStatic) // member vars cannot be accessed in a static method
                   {
@@ -754,12 +754,12 @@ class Typer(implicit config: Config)
                       )
                     }
 
-                  printf(s"It's a member method!\n")
+                //   printf(s"It's a member method!\n")
 
                     MemberMethod(This(), m)(m.typ)
                   } else {
 
-                  printf(s"It's a static method!\n")
+                //   printf(s"It's a static method!\n")
 
                   StaticMethod(ctx.currentClass, m)(m.typ)
                 }
