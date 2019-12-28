@@ -428,25 +428,25 @@ public final class Simulator {
 
         @Override
         public void visitMemory(TacInstr.Memory instr) {
-            // System.out.println("visitMemory(instr = " + instr + ")");
+            System.out.println("visitMemory(instr = " + instr + ")");
 
             var frame = _call_stack.peek();
             int base = frame.array[instr.base.index];
             int offset = instr.offset;
 
-            // System.out.println("base = " + base + ", offset = " + offset);
+            System.out.println("base = " + base + ", offset = " + offset);
 
             switch (instr.op) {
             case LOAD:
                 frame.array[instr.dst.index] = _memory.load(base, offset);
 
-                // System.out.println("The dst of LOAD is " + frame.array[instr.dst.index]);
+                System.out.println("The dst of LOAD is " + frame.array[instr.dst.index]);
 
                 break;
             case STORE:
                 _memory.store(frame.array[instr.dst.index], base, offset);
 
-                // System.out.println("The dst of STORE is " + frame.array[instr.dst.index]);
+                System.out.println("The dst of STORE is " + frame.array[instr.dst.index]);
 
                 break;
             }

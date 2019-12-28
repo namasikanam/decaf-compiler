@@ -203,8 +203,12 @@ trait TacEmitter {
       case NewClass(clazz) => fv.visitNewClass(clazz.name)
 
       case This() =>
-        val _T0 = fv.getArgTemp(0)
-        fv.visitLoadFrom(_T0, 4)
+        if (currentFormalScope.isDefined) {
+          val _T0 = fv.getArgTemp(0)
+          fv.visitLoadFrom(_T0, 4)
+        } else {
+          fv.getArgTemp(0)
+        }
 
       case MemberVar(receiver, variable) =>
         val rt = emitExpr(receiver)
@@ -227,7 +231,7 @@ trait TacEmitter {
         // args = ArrayList{_T1, ..., _T{函数类型的参数数量}}
         val args = List
           .range(1, method.typ.args.length + 1)
-          .map((i: Int) => newFv.getArgTemp(i))
+          .map(i => newFv.getArgTemp(i))
 
         if (method.typ.ret.isVoidType) {
           newFv.visitMemberCall(this_, method.owner.name, method.name, args)
@@ -335,7 +339,8 @@ trait TacEmitter {
         }
 
         // 在 newFv 中生成 expr 的 TAC 代碼
-        emitExpr(expr)(ctxLambda, newFv)
+        val e = emitExpr(expr)(ctxLambda, newFv)
+        newFv.visitReturn(e)
 
         // newFv.visitEnd()
         newFv.visitEnd()
@@ -352,10 +357,18 @@ trait TacEmitter {
         fv.visitStoreTo(result, 0, func)
 
         // 在 fv 中生成 *(result + 4) = this
-        // 如果 this 存在，其必然在這裡；對於 this 不存在的情況，則保存 this 無意義
-        val _T0 = fv.getArgTemp(0)
-        val this_ = fv.visitLoadFrom(_T0, 4)
-        fv.visitStoreTo(result, 4, this_)
+        // If the function object is passed as the first argument
+        if (fv.argsTemps.length > 0) {
+          if (pastFormalScope.isDefined) {
+            val _T0 = fv.getArgTemp(0)
+            val this_ = fv.visitLoadFrom(_T0, 4)
+            fv.visitStoreTo(result, 4, this_)
+          } else {
+            // For static function, this is wrong, but doesn't have influence.
+            val this_ = fv.getArgTemp(0)
+            fv.visitStoreTo(result, 4, this_)
+          }
+        }
 
         // for i in 0..被捕獲的變量數
         //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量
@@ -415,10 +428,18 @@ trait TacEmitter {
         fv.visitStoreTo(result, 0, func)
 
         // 在 fv 中生成 *(result + 4) = this
-        // 如果 this 存在，其必然在這裡；對於 this 不存在的情況，則保存 this 無意義
-        val _T0 = fv.getArgTemp(0)
-        val this_ = fv.visitLoadFrom(_T0, 4)
-        fv.visitStoreTo(result, 4, this_)
+        // If the function object is passed as the first argument
+        if (fv.argsTemps.length > 0) {
+          if (pastFormalScope.isDefined) {
+            val _T0 = fv.getArgTemp(0)
+            val this_ = fv.visitLoadFrom(_T0, 4)
+            fv.visitStoreTo(result, 4, this_)
+          } else {
+            // For static function, this is wrong, but doesn't have influence.
+            val this_ = fv.getArgTemp(0)
+            fv.visitStoreTo(result, 4, this_)
+          }
+        }
 
         // for i in 0..被捕獲的變量數
         //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量

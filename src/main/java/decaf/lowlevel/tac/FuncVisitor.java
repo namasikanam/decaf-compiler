@@ -517,5 +517,5 @@ public class FuncVisitor {
 
     private int nextTempId = 0;
 
-    private Temp[] argsTemps;
+    public Temp[] argsTemps;
 }

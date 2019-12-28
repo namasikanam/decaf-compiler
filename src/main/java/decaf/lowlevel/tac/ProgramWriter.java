@@ -60,8 +60,7 @@ public class ProgramWriter {
     public FuncVisitor visitMainMethod() {
         var entry = FuncLabel.MAIN_LABEL;
         // In fact, there's no arguments to pass in to main function
-        // But this one is reserved for compatible
-        return new FuncVisitor(entry, 1, ctx);
+        return new FuncVisitor(entry, 0, ctx);
     }
 
     /**
