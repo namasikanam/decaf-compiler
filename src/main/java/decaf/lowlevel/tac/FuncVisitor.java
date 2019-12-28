@@ -185,6 +185,9 @@ public class FuncVisitor {
      * @return a fresh temp as destination
      */
     public Temp visitMemberAccess(Temp object, String clazz, String variable) {
+        // System.out.println("visitMemberAcess(object, clazz = " + clazz + ", variable
+        // = " + variable + ")");
+
         return visitLoadFrom(object, ctx.getOffset(clazz, variable));
     }
 
@@ -211,6 +214,8 @@ public class FuncVisitor {
      * @return the fresh temp if we need return (or else null)
      */
     public Temp visitMemberCall(Temp object, String clazz, String method, List<Temp> args, boolean needReturn) {
+        System.out.println("visitMemberCall(object, clazz = " + clazz + ", method = " + method + ", args, needReturn)");
+
         Temp temp = null;
         var vtbl = visitLoadFrom(object);
         var entry = visitLoadFrom(vtbl, ctx.getOffset(clazz, method));

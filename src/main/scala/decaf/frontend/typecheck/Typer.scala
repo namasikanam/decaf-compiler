@@ -465,8 +465,35 @@ class Typer(implicit config: Config)
               case Some(sym) =>
                 sym match {
                   case m: MethodSymbol => typeCall(call, r, m)
-                  case mv: MemberVarSymbol =>
-                    issue(new CallUncallableError(mv.typ, expr.pos)); err
+                  case v: MemberVarSymbol =>
+                    v.typ match {
+                      case FunType(typArgs, ret) =>
+                        if (typArgs.length != args.length) {
+                          issue(
+                            new BadArgCountError(
+                              v.name,
+                              typArgs.length,
+                              args.length,
+                              expr.pos
+                            )
+                          )
+                        }
+                        val as = (typArgs zip args).zipWithIndex.map {
+                          case ((t, a), i) =>
+                            val e = typeExpr(a)
+                            if (e.typ.noError && !(e.typ <= t)) {
+                              issue(new BadArgTypeError(i + 1, t, e.typ, a.pos))
+                            }
+                            e
+                        }
+                        // TODO: fix this cheat¦
+                        // Q on 2019-12-20: What's cheat? What am I writing?
+                        FunctionCall(MemberVar(This(), v)(v.typ), as)(ret)
+                      case NoType => err
+                      case _ =>
+                        issue(new CallUncallableError(v.typ, expr.pos))
+                        err
+                    }
                   case _ =>
                     issue(new NotClassMethodError(method, t, method.pos)); err
                 }
@@ -672,7 +699,7 @@ class Typer(implicit config: Config)
   private def typeLValue(
       expr: LValue
   )(implicit ctx: ScopeContext): LValue = {
-    // printf(s"typeLValue(expr = $expr)\n")
+    printf(s"At ${expr.pos}, typeLValue(expr = $expr)\n")
 
     val err = ErrorTypeLValue(expr)
 
@@ -704,9 +731,9 @@ class Typer(implicit config: Config)
                   }
                 MemberVar(This(), v)(v.typ)
               case m: MethodSymbol =>
-                // printf(
-                //   s"Find a MethodSymbol $m, m.isStatic = ${m.isStatic}, ctx.currentMethod.isStatic = ${ctx.currentMethod.isStatic}\n"
-                // )
+                printf(
+                  s"Find a MethodSymbol $m, m.isStatic = ${m.isStatic}, ctx.currentMethod.isStatic = ${ctx.currentMethod.isStatic}\n"
+                )
 
                 if (!m.isStatic) // member vars cannot be accessed in a static method
                   {
@@ -719,11 +746,15 @@ class Typer(implicit config: Config)
                         )
                       )
                     }
+
+                  printf(s"It's a member method!\n")
+
                     MemberMethod(This(), m)(m.typ)
                   } else {
-                  if (ctx.currentMethod.isStatic)
-                    StaticMethod(ctx.currentClass, m)(m.typ)
-                  else MemberMethod(This(), m)(m.typ)
+
+                  printf(s"It's a static method!\n")
+
+                  StaticMethod(ctx.currentClass, m)(m.typ)
                 }
               case _ =>
                 // printf("When typeChecking VarSel " + id.name + ", we find a strange symbol.\n")
@@ -776,8 +807,11 @@ class Typer(implicit config: Config)
                     MemberVar(r, v)(v.typ)
                   case m: MethodSymbol =>
                     if (m.isStatic) { // TODO: Some unknown issue should occur here
+                        StaticMethod(m.owner, m)(m.typ)
                     }
-                    MemberMethod(r, m)(m.typ)
+                    else {
+                        MemberMethod(r, m)(m.typ)
+                    }
                   case _ => issue(new FieldNotFoundError(id, t, expr.pos)); err
                 }
               case None => issue(new FieldNotFoundError(id, t, expr.pos)); err

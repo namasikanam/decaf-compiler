@@ -124,7 +124,7 @@ trait TacEmitter {
     * @return a temp storing the value of this expression
     */
   def emitExpr(expr: Expr)(implicit ctx: Context, fv: FuncVisitor): Temp = {
-    printf(s"emitExpr(expr = $expr)\n")
+    printf(s"At ${expr.pos}, emitExpr(expr = $expr)\n")
 
     expr match {
       case IntLit(value)    => fv.visitLoad(value)
@@ -217,6 +217,8 @@ trait TacEmitter {
       case MemberMethod(receiver, method) =>
         // 访问 expr.receiver
         val rcvr = emitExpr(receiver)
+
+        printf(s"At ${expr.pos}, MemberMethod($receiver, $method)\n")
 
         // newMv = mv.freshFunc(随便起个名字，函数类型的参数数量 + 1);
         val methodName = "member:(" + rcvr.toString + ")." + method.name + "@" + Random.alphanumeric
