@@ -321,6 +321,8 @@ trait TacEmitter {
         result
 
       case ExpressionLambda(params, expr, scope) =>
+        printf(s"captured = ${scope.captured}\n")
+
         // 記錄當前是在這個Lambda中 // 此時不再需要棧了
         val pastFormalScope = currentFormalScope
         currentFormalScope = Some(scope)

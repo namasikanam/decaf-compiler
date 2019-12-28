@@ -328,7 +328,7 @@ class Typer(implicit config: Config)
     * @return typed expression
     */
   def typeExpr(expr: Expr)(implicit ctx: ScopeContext): Expr = {
-    // printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
+    printf(s"testExpr(expr = $expr) at ${expr.pos}\n")
 
     val err = ErrorTypeExpr(expr)
 
@@ -529,6 +529,11 @@ class Typer(implicit config: Config)
                             }
                             e
                         }
+                        
+                        printf(s"Try to capture ${v}\n")
+
+                        ctx.capture(v)
+
                         FunctionCall(LocalVar(v)(v.typ), as)(ret)
                       case NoType => err
                       case _ =>
@@ -715,6 +720,8 @@ class Typer(implicit config: Config)
           case Some(sym) if !initVars.contains(sym.name) =>
             sym match {
               case v: LocalVarSymbol =>
+                printf(s"Try to capture ${v}\n")
+
                 ctx.capture(v)
 
                 LocalVar(v)(v.typ)

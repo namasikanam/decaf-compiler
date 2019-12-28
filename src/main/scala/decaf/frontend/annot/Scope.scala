@@ -359,6 +359,8 @@ class ScopeContext private (
           s match {
             case fs: FormalScope =>
               if (!fs.captured.contains(v)) {
+                printf(s"FormalScope($fs).captured += LocalVarSymbol($v)\n")
+
                 fs.captured = v +: fs.captured
                 capture(v, ss)
               }
