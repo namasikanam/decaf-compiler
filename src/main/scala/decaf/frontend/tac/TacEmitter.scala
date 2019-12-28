@@ -325,17 +325,17 @@ trait TacEmitter {
 
         val newFv = fv.freshFunc(
           lambdaName,
-          params.size() + 2
+          params.size() + 1
         )
 
         var ctxLambda = ctx
         var i = 0
         for (i <- 0 to params.size() - 1) {
-          ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 2))
+          ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 1))
         }
-        for (i <- 0 to params.size() - 1) {
+        for (i <- 0 to scope.captured.size() - 1) {
           ctxLambda.vars.update(
-            params(i).symbol,
+            scope.captured(i),
             newFv.visitLoadFrom(newFv.getArgTemp(0), 8 + i * 4)
           )
         }
@@ -397,17 +397,17 @@ trait TacEmitter {
 
         val newFv = fv.freshFunc(
           lambdaName,
-          params.size() + 2
+          params.size() + 1
         )
 
         var ctxLambda = ctx
         var i = 0
         for (i <- 0 to params.size() - 1) {
-          ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 2))
+          ctxLambda.vars.update(params(i).symbol, newFv.getArgTemp(i + 1))
         }
-        for (i <- 0 to params.size() - 1) {
+        for (i <- 0 to scope.captured.size() - 1) {
           ctxLambda.vars.update(
-            params(i).symbol,
+            scope.captured(i),
             newFv.visitLoadFrom(newFv.getArgTemp(0), 8 + i * 4)
           )
         }
