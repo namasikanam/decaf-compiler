@@ -265,14 +265,15 @@ trait TacEmitter {
           .take(10)
           .mkString
 
+        // 雖然 _T0 傳進來的參數沒有什麼用處，但為了調用的一致性這裡仍需要為它留一個位置
         val newFv = fv.freshFunc(
           methodName,
-          method.typ.args.size()
+          method.typ.args.size() + 1
         )
 
-        // args = ArrayList{_T0, ..., _T{函数类型的参数数量 - 1}}
+        // args = ArrayList{_T1, ..., _T{函数类型的参数数量}}
         val args = List
-          .range(0, method.typ.args.length)
+          .range(1, method.typ.args.length + 1)
           .map((i: Int) => newFv.getArgTemp(i))
 
         if (method.typ.ret.isVoidType) {
