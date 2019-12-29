@@ -488,7 +488,7 @@ class Typer(implicit config: Config)
                         }
                         // TODO: fix this cheat¦
                         // Q on 2019-12-20: What's cheat? What am I writing?
-                        FunctionCall(MemberVar(This(), v)(v.typ), as)(ret)
+                        FunctionCall(MemberVar(This()(ctx.currentClass.typ), v)(v.typ), as)(ret)
                       case NoType => err
                       case _ =>
                         issue(new CallUncallableError(v.typ, expr.pos))
@@ -563,7 +563,7 @@ class Typer(implicit config: Config)
                         }
                         // TODO: fix this cheat¦
                         // Q on 2019-12-20: What's cheat? What am I writing?
-                        FunctionCall(MemberVar(This(), v)(v.typ), as)(ret)
+                        FunctionCall(MemberVar(This()(ctx.currentClass.typ), v)(v.typ), as)(ret)
                       case NoType => err
                       case _ =>
                         issue(new CallUncallableError(v.typ, expr.pos))
@@ -605,7 +605,7 @@ class Typer(implicit config: Config)
                         if (m.isStatic) {
                           StaticCall(m, as)(ret)
                         } else {
-                          MemberCall(This(), m, as)(ret)
+                          MemberCall(This()(ctx.currentClass.typ), m, as)(ret)
                         }
                     }
                   case _ =>
@@ -697,7 +697,7 @@ class Typer(implicit config: Config)
     if (method.isStatic) {
       StaticCall(method, as)(method.returnType)
     } else {
-      MemberCall(receiver.getOrElse(This()), method, as)(method.returnType)
+      MemberCall(receiver.getOrElse(This()(ctx.currentClass.typ)), method, as)(method.returnType)
     }
   }
 
@@ -736,7 +736,7 @@ class Typer(implicit config: Config)
                       )
                     )
                   }
-                MemberVar(This(), v)(v.typ)
+                MemberVar(This()(ctx.currentClass.typ), v)(v.typ)
               case m: MethodSymbol =>
                 // printf(
                 //   s"Find a MethodSymbol $m, m.isStatic = ${m.isStatic}, ctx.currentMethod.isStatic = ${ctx.currentMethod.isStatic}\n"
@@ -756,7 +756,7 @@ class Typer(implicit config: Config)
 
                 //   printf(s"It's a member method!\n")
 
-                    MemberMethod(This(), m)(m.typ)
+                    MemberMethod(This()(ctx.currentClass.typ), m)(m.typ)
                   } else {
 
                 //   printf(s"It's a static method!\n")

@@ -197,6 +197,19 @@ trait Util {
     case ClassType(name, _) => ASMType.getObjectType(name)
     case ArrayType(elemType) =>
       ASMType.getType('[' + toASMType(elemType).getDescriptor)
+    case t @ FunType(params, ret) =>
+      ASMType.getObjectType(fromFunTypeToFunBaseClassName(t))
+  }
+
+  /** Translate a Decaf type to JVM assembly type. */
+  def method_toASMType(typ: Type): ASMType = typ match {
+    case IntType            => ASMType.INT_TYPE
+    case BoolType           => ASMType.BOOLEAN_TYPE
+    case StringType         => ASMType.getType(classOf[java.lang.String])
+    case VoidType           => ASMType.VOID_TYPE
+    case ClassType(name, _) => ASMType.getObjectType(name)
+    case ArrayType(elemType) =>
+      ASMType.getType('[' + toASMType(elemType).getDescriptor)
     case FunType(params, ret) =>
       ASMType.getMethodType(toASMType(ret), params.map(toASMType): _*)
   }
@@ -211,14 +224,29 @@ trait Util {
     toASMType(clazz.typ).getInternalName
 
   /**
-    * Get the (type) descriptor of a field symbol.
-    * See https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.3 for descriptor syntax.
+    * Get the internal name of a class type
+    * for the assitant class, which doesn't have a symbol
     *
-    * @param field the field symbol, i.e. member var/method
+    * @param classTyp the class type
+    */
+  def internalName(classTyp: ClassType): String =
+    toASMType(classTyp).getInternalName
+
+  /**
+    * Get the (type) descriptor of a type.
+    *
+    * @param typ the type
     * @return its descriptor
     */
-  def descriptor(field: FieldSymbol): String =
-    toASMType(field.typ).getDescriptor
+  def method_descriptor(typ: Type): String = method_toASMType(typ).getDescriptor
+
+  /**
+    * Get the (type) descriptor of a type.
+    *
+    * @param typ the type
+    * @return its descriptor
+    */
+  def descriptor(typ: Type): String = toASMType(typ).getDescriptor
 
   // -----------------------------------------------------------------------------------------------
   // The following group of methods handle selection choice based on types. Since JVM has NO useful
@@ -333,4 +361,14 @@ trait Util {
     mv.visitInsn(Opcodes.ICONST_1)
     mv.visitLabel(exitLabel)
   }
+
+  def fromFunTypeToFunBaseClassName(typ: FunType): String =
+    "_" + typ.toString
+      .replace(" ", "")
+      .replace('(', '6')
+      .replace(')', '9')
+      .replace('>', 'D')
+
+  def fromFunTypeToFunBaseClassType(typ: FunType): ClassType =
+    ClassType(fromFunTypeToFunBaseClassName(typ), None)
 }

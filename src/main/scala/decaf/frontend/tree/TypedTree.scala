@@ -55,7 +55,7 @@ object TypedTree extends TreeTmpl {
   ) extends LValue
 
   /**
-    * Calling a static method. Derives from [[SyntaxTree.Call]].
+    * Calling a static method.
     *
     * @param method the symbol of the method definition it invokes
     * @param args   arguments
@@ -65,7 +65,7 @@ object TypedTree extends TreeTmpl {
   ) extends Expr
 
   /**
-    * Calling a member/instance method. Derives from [[SyntaxTree.Call]].
+    * Calling a member/instance method.
     *
     * @param receiver target instance
     * @param method   the symbol of the method definition it invokes
@@ -76,7 +76,7 @@ object TypedTree extends TreeTmpl {
   ) extends Expr
 
   /**
-    * Obtain array length. Derives from [[SyntaxTree.Call]].
+    * Obtain array length.
     *
     * @param array an expression evaluates to an array
     */
@@ -84,7 +84,7 @@ object TypedTree extends TreeTmpl {
       extends Expr
 
   /**
-    * Calling a function. Derives from [[SyntaxTree.Call]].
+    * Calling a function.
     *
     * @param function an function
     */
