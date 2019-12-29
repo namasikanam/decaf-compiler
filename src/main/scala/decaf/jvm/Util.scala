@@ -229,8 +229,13 @@ trait Util {
     *
     * @param classTyp the class type
     */
-  def internalName(classTyp: ClassType): String =
-    toASMType(classTyp).getInternalName
+  def internalName(classTyp: ClassType): String = {
+    val in = toASMType(classTyp).getInternalName
+
+    printf(s"classTyp = $classTyp, internal name = $in\n")
+
+    in
+  }
 
   /**
     * Get the (type) descriptor of a type.

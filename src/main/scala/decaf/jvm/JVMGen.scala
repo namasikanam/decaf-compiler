@@ -27,6 +27,8 @@ class JVMGen(implicit config: Config)
 
     printf("===== Emitted all classes. ========\n")
 
+    printf(s"funcionTypes = ${functionTypes.toList}\n")
+
     val functionBasesEmit = functionTypes.toList.map(emitFunctionBase)
 
     printf("====== Emitted all function base classes =========\n")
@@ -129,7 +131,9 @@ class JVMGen(implicit config: Config)
     val assistName = clazz.name + "$" + method.name
     val parentType =
       ClassType(fromFunTypeToFunBaseClassName(method.symbol.typ), None)
-    val assistType = ClassType(method.name, Some(parentType))
+    val assistType = ClassType(assistName, Some(parentType))
+
+    printf(s"emitAssitsMethod: assistName = $assistName\n")
 
     implicit val cw = new ClassWriter(
       ClassWriter.COMPUTE_FRAMES + ClassWriter.COMPUTE_MAXS
