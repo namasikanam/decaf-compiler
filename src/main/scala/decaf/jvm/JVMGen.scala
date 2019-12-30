@@ -151,7 +151,7 @@ class JVMGen(implicit config: Config)
       // 对于成员方法，类里面需要捕获一个[[self]]
       cw.visitField(
         Opcodes.ACC_PUBLIC,
-        "self",
+        "_self",
         descriptor(clazz.symbol.typ),
         null,
         null
@@ -205,7 +205,7 @@ class JVMGen(implicit config: Config)
       apply_mv.visitFieldInsn(
         Opcodes.GETFIELD,
         internalName(assistType),
-        "self",
+        "_self",
         descriptor(clazz.symbol.typ)
       )
 
@@ -289,15 +289,16 @@ class JVMGen(implicit config: Config)
       null
     )
 
-    // 为 this 创建成员变量
-    // 方便起见，这里都有定义，但如果 lambda 在静态方法中，[[self]]不会被赋值
-    cw.visitField(
-      Opcodes.ACC_PUBLIC,
-      "_self", // a prepended underscore to distinguish it from a ordinary [[self]]
-      descriptor(classType),
-      null,
-      null
-    )
+    if (!isStatic) {
+      // 为 this 创建成员变量
+      cw.visitField(
+        Opcodes.ACC_PUBLIC,
+        "_self", // a prepended underscore to distinguish it from a ordinary [[self]]
+        descriptor(classType),
+        null,
+        null
+      )
+    }
     // 为捕获变量创建成员变量
     lambda.scope.captured.map(
       v =>
@@ -787,7 +788,7 @@ class JVMGen(implicit config: Config)
         mv.visitFieldInsn(
           Opcodes.PUTFIELD,
           internalName(assistClassType),
-          "self",
+          "_self",
           descriptor(receiver.typ)
         )
 
