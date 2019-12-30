@@ -262,8 +262,13 @@ class JVMGen(implicit config: Config)
   def emitLambda(
       lambda: BlockLambda,
       index: Int,
-      classType: ClassType
+      classType: ClassType,
+      isStatic: Boolean
   ): Unit = {
+    printf(
+      s"emitLambda(lambda = $lambda, index = $index, classType = $classType, isStatic = $isStatic)\n"
+    )
+
     // 声明一个函数类
     val lambdaName = "Lambda$" + index
     val parentType = fromFunTypeToFunBaseClassType(
@@ -335,7 +340,7 @@ class JVMGen(implicit config: Config)
         null,
         null
       )
-    implicit val apply_ctx = new Context(lambdaType, false)
+    implicit val apply_ctx = new Context(classType, isStatic)
     // apply 的参数和 params 完全一致
     lambda.params.foreach { p =>
       apply_ctx.declare(p.symbol)
@@ -346,15 +351,17 @@ class JVMGen(implicit config: Config)
     // 此时，函数对象被放到了 0 号位置
     // 先把函数对象从 0 号位置取出来
     apply_mv.visitVarInsn(Opcodes.ALOAD, 0)
-    // 无脑捕获 this
-    apply_mv.visitInsn(Opcodes.DUP)
-    apply_mv.visitFieldInsn(
-      Opcodes.GETFIELD,
-      internalName(lambdaType),
-      "_self",
-      descriptor(classType)
-    )
-    apply_mv.visitVarInsn(storeOp(classType), 0)
+    if (!isStatic) {
+      // 如果不在 static中的话，需要捕获
+      apply_mv.visitInsn(Opcodes.DUP)
+      apply_mv.visitFieldInsn(
+        Opcodes.GETFIELD,
+        internalName(lambdaType),
+        "_self",
+        descriptor(classType)
+      )
+      apply_mv.visitVarInsn(storeOp(classType), 0)
+    }
     // 把其他的捕获变量加进去
     lambda.scope.captured.map(p => {
       apply_ctx.declare(p)
@@ -446,6 +453,7 @@ class JVMGen(implicit config: Config)
 
     apply_mv.visitCode()
     if (!typ.ret.isVoidType) {
+      // 这里其实没有意义，但不知道为什么，我不能传一个空引用……
       typ.ret match {
         case IntType | BoolType =>
           apply_mv.visitLdcInsn(0)
@@ -471,6 +479,9 @@ class JVMGen(implicit config: Config)
             CONSTRUCTOR_DESC,
             false
           )
+          apply_mv.visitInsn(Opcodes.ARETURN)
+        case StringType =>
+          apply_mv.visitLdcInsn("")
           apply_mv.visitInsn(Opcodes.ARETURN)
         // TODO: 还有一些其他情况需要考虑……
       }
@@ -849,7 +860,8 @@ class JVMGen(implicit config: Config)
             scope
           )(el.typ),
           lambdaIndex,
-          ctx.currentClassType
+          ctx.currentClassType,
+          ctx.isStatic
         )
         // 方便起见，这里先预准备一些相关的类型
         val lambdaClassName = "Lambda$" + lambdaIndex
@@ -906,7 +918,7 @@ class JVMGen(implicit config: Config)
         // 方便起见，声明时我们将所有的 lambda 表达式都统一视为 BlockLambda
         val lambdaIndex = lambdaTot
         lambdaTot += 1
-        emitLambda(bl, lambdaIndex, ctx.currentClassType)
+        emitLambda(bl, lambdaIndex, ctx.currentClassType, ctx.isStatic)
         // 方便起见，这里先预准备一些相关的类型
         val lambdaClassName = "Lambda$" + lambdaIndex
         val parentType = fromFunTypeToFunBaseClassType(
