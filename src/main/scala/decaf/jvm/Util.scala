@@ -373,6 +373,9 @@ trait Util {
       .replace('(', '6')
       .replace(')', '9')
       .replace('>', 'D')
+      .replace(',', '1')
+      .replace('[', '5')
+      .replace(']', '2')
 
   def fromFunTypeToFunBaseClassType(typ: FunType): ClassType =
     ClassType(fromFunTypeToFunBaseClassName(typ), None)

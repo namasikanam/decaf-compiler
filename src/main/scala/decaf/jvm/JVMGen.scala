@@ -25,18 +25,18 @@ class JVMGen(implicit config: Config)
   override def transform(input: Tree): List[JVMClass] = {
     val inputsEmit = input.classes.map(emitClass)
 
-    printf("===== Emitted all classes. ========\n")
+    // printf("===== Emitted all classes. ========\n")
 
-    printf(s"funcionTypes = ${functionTypes.toList}\n")
+    // printf(s"funcionTypes = ${functionTypes.toList}\n")
 
     val functionBasesEmit = functionTypes.toList.map(emitFunctionBase)
 
-    printf("====== Emitted all function base classes =========\n")
+    // printf("====== Emitted all function base classes =========\n")
 
     val assistMethodsEmit =
       assistMethods.toList.map(x => emitAssistMethod(x._1, x._2))
 
-    printf("======= Emitted all assist methods ===========\n")
+    // printf("======= Emitted all assist methods ===========\n")
 
     // The order, I guess, is nothing
     inputsEmit ++ functionBasesEmit ++ assistMethodsEmit ++ lambdaJVMClasses.toList
@@ -265,9 +265,9 @@ class JVMGen(implicit config: Config)
       classType: ClassType,
       isStatic: Boolean
   ): Unit = {
-    printf(
-      s"emitLambda(lambda = $lambda, index = $index, classType = $classType, isStatic = $isStatic)\n"
-    )
+    // printf(
+    //   s"emitLambda(lambda = $lambda, index = $index, classType = $classType, isStatic = $isStatic)\n"
+    // )
 
     // 声明一个函数类
     val lambdaName = "Lambda$" + index
@@ -341,6 +341,11 @@ class JVMGen(implicit config: Config)
         null
       )
     implicit val apply_ctx = new Context(classType, isStatic)
+    // 这里有一些歧义，虽然 lambda 表达式是在一个静态方法里，不会有 this 的传递
+    // 但 lambda 表达式本身在这里的设计中还是作为一个成员方法来调用的。
+    // 此处 isStatic 表示的含义在原有框架中和被我魔改过的框架中已经不同了。
+    // 现在 isStatic 仅仅代表最外层的函数体是否是静态的，所以用它来判断是否有第0个参数传入已经不再合理了。
+    apply_ctx.next = 1
     // apply 的参数和 params 完全一致
     lambda.params.foreach { p =>
       apply_ctx.declare(p.symbol)
