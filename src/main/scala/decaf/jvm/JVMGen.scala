@@ -39,7 +39,7 @@ class JVMGen(implicit config: Config)
     printf("======= Emitted all assist methods ===========\n")
 
     // The order, I guess, is nothing
-    inputsEmit ++ assistMethodsEmit ++ functionBasesEmit
+    inputsEmit ++ functionBasesEmit ++ assistMethodsEmit ++ lambdaJVMClasses.toList
   }
 
   /**
@@ -114,7 +114,7 @@ class JVMGen(implicit config: Config)
         functionTypes += method.symbol.typ
         assistMethods += new Tuple2(clazz, method)
 
-        emitMethod(method)
+        emitMethod(clazz, method)
     }
     cw.visitEnd()
 
@@ -129,11 +129,10 @@ class JVMGen(implicit config: Config)
     */
   def emitAssistMethod(clazz: ClassDef, method: MethodDef): JVMClass = {
     val assistName = clazz.name + "$" + method.name
-    val parentType =
-      ClassType(fromFunTypeToFunBaseClassName(method.symbol.typ), None)
+    val parentType = fromFunTypeToFunBaseClassType(method.symbol.typ)
     val assistType = ClassType(assistName, Some(parentType))
 
-    printf(s"emitAssitsMethod: assistName = $assistName\n")
+    // printf(s"emitAssitsMethod: assistName = $assistName\n")
 
     implicit val cw = new ClassWriter(
       ClassWriter.COMPUTE_FRAMES + ClassWriter.COMPUTE_MAXS
@@ -192,7 +191,7 @@ class JVMGen(implicit config: Config)
         null,
         null
       )
-    implicit val apply_ctx = new Context(false)
+    implicit val apply_ctx = new Context(assistType, false)
     // apply 的参数和原本 method 的参数完全一致
     method.params.foreach { p =>
       apply_ctx.declare(p.symbol)
@@ -254,6 +253,140 @@ class JVMGen(implicit config: Config)
   }
 
   /**
+    * 为每一个 lambda 表达式声明一个lambda函数类
+    * 这里假定所有的 lambda 表达式都已被转为 BlockLambda
+    *
+    * @param lambda the block lambda
+    * @return the wrapped class file
+    */
+  def emitLambda(
+      lambda: BlockLambda,
+      index: Int,
+      classType: ClassType
+  ): Unit = {
+    // 声明一个函数类
+    val lambdaName = "Lambda$" + index
+    val parentType = fromFunTypeToFunBaseClassType(
+      lambda.typ.asInstanceOf[FunType]
+    )
+    val lambdaType = ClassType(lambdaName, Some(parentType))
+
+    implicit val cw = new ClassWriter(
+      ClassWriter.COMPUTE_FRAMES + ClassWriter.COMPUTE_MAXS
+    )
+    val superClass = internalName(parentType)
+    cw.visit(
+      Opcodes.V1_8,
+      Opcodes.ACC_PUBLIC + Opcodes.ACC_SUPER,
+      lambdaName,
+      null,
+      superClass,
+      null
+    )
+
+    // 为 this 创建成员变量
+    // 方便起见，这里都有定义，但如果 lambda 在静态方法中，[[self]]不会被赋值
+    cw.visitField(
+      Opcodes.ACC_PUBLIC,
+      "_self", // a prepended underscore to distinguish it from a ordinary [[self]]
+      descriptor(classType),
+      null,
+      null
+    )
+    // 为捕获变量创建成员变量
+    lambda.scope.captured.map(
+      v =>
+        cw.visitField(
+          Opcodes.ACC_PUBLIC,
+          v.name,
+          descriptor(v.typ),
+          null,
+          null
+        )
+    )
+
+    // First add the default constructor
+    val construct_mv = cw.visitMethod(
+      Opcodes.ACC_PUBLIC,
+      CONSTRUCTOR_NAME,
+      CONSTRUCTOR_DESC,
+      null,
+      null
+    )
+    construct_mv.visitCode()
+    construct_mv.visitVarInsn(Opcodes.ALOAD, 0)
+    construct_mv.visitMethodInsn(
+      Opcodes.INVOKESPECIAL,
+      superClass,
+      CONSTRUCTOR_NAME,
+      CONSTRUCTOR_DESC,
+      false
+    ) // call super
+    construct_mv.visitInsn(Opcodes.RETURN)
+    construct_mv.visitMaxs(-1, -1) // pass in random numbers, as COMPUTE_MAXS flag enables the computation
+    construct_mv.visitEnd()
+
+    // 定义一个apply
+    implicit val apply_mv =
+      cw.visitMethod(
+        Opcodes.ACC_PUBLIC,
+        "apply",
+        method_descriptor(lambda.typ),
+        null,
+        null
+      )
+    implicit val apply_ctx = new Context(lambdaType, false)
+    // apply 的参数和 params 完全一致
+    lambda.params.foreach { p =>
+      apply_ctx.declare(p.symbol)
+    }
+
+    apply_mv.visitCode()
+
+    // 此时，函数对象被放到了 0 号位置
+    // 先把函数对象从 0 号位置取出来
+    apply_mv.visitVarInsn(Opcodes.ALOAD, 0)
+    // 无脑捕获 this
+    apply_mv.visitInsn(Opcodes.DUP)
+    apply_mv.visitFieldInsn(
+      Opcodes.GETFIELD,
+      internalName(lambdaType),
+      "_self",
+      descriptor(classType)
+    )
+    apply_mv.visitVarInsn(storeOp(classType), 0)
+    // 把其他的捕获变量加进去
+    lambda.scope.captured.map(p => {
+      apply_ctx.declare(p)
+
+      apply_mv.visitInsn(Opcodes.DUP)
+      apply_mv.visitFieldInsn(
+        Opcodes.GETFIELD,
+        internalName(lambdaType),
+        p.name,
+        descriptor(p.typ)
+      )
+
+      apply_mv.visitVarInsn(storeOp(p.typ), apply_ctx.index(p))
+    })
+    apply_mv.visitInsn(Opcodes.POP)
+
+    // 去搞函数体
+    implicit val loopExits: List[Label] = Nil
+    emitStmt(lambda.block)
+
+    if (lambda.typ.asInstanceOf[FunType].ret.isVoidType) {
+      // 其实我应该是可以无脑加一个return的
+      apply_mv.visitInsn(Opcodes.RETURN)
+    }
+
+    apply_mv.visitMaxs(-1, -1)
+    apply_mv.visitEnd()
+
+    lambdaJVMClasses += JVMClass(lambdaName, cw.toByteArray)
+  }
+
+  /**
     * 声明已有函数对象所需的基类
     *
     * @param typ function type of the base class
@@ -309,7 +442,7 @@ class JVMGen(implicit config: Config)
         null,
         null
       )
-    implicit val apply_ctx = new Context(false)
+    implicit val apply_ctx = new Context(classType, false)
 
     apply_mv.visitCode()
     if (!typ.ret.isVoidType) {
@@ -317,7 +450,6 @@ class JVMGen(implicit config: Config)
         case IntType | BoolType =>
           apply_mv.visitLdcInsn(0)
           apply_mv.visitInsn(Opcodes.IRETURN)
-        // TODO: 还有一些其他情况需要考虑……
         case t @ FunType(_, _) =>
           apply_mv.visitTypeInsn(Opcodes.NEW, toASMType(t).getInternalName)
           apply_mv.visitInsn(Opcodes.DUP)
@@ -328,8 +460,19 @@ class JVMGen(implicit config: Config)
             CONSTRUCTOR_DESC,
             false
           )
-
           apply_mv.visitInsn(Opcodes.ARETURN)
+        case t @ ClassType(_, _) =>
+          apply_mv.visitTypeInsn(Opcodes.NEW, internalName(t))
+          apply_mv.visitInsn(Opcodes.DUP)
+          apply_mv.visitMethodInsn(
+            Opcodes.INVOKESPECIAL,
+            internalName(t),
+            CONSTRUCTOR_NAME,
+            CONSTRUCTOR_DESC,
+            false
+          )
+          apply_mv.visitInsn(Opcodes.ARETURN)
+        // TODO: 还有一些其他情况需要考虑……
       }
     } else {
       apply_mv.visitInsn(Opcodes.RETURN)
@@ -346,8 +489,10 @@ class JVMGen(implicit config: Config)
     * @param method the method
     * @param cw     the current class writer
     */
-  def emitMethod(method: MethodDef)(implicit cw: ClassWriter): Unit = {
-    printf(s"emitMethod(method = $method)\n")
+  def emitMethod(clazz: ClassDef, method: MethodDef)(
+      implicit cw: ClassWriter
+  ): Unit = {
+    // printf(s"emitMethod(method = $method)\n")
 
     // Methods are always public, but they can be static or not.
     val access = Opcodes.ACC_PUBLIC + (if (method.isStatic) Opcodes.ACC_STATIC
@@ -361,7 +506,7 @@ class JVMGen(implicit config: Config)
 
     // Allocate indexes (in JVM local variable array) for every argument. For member methods, index 0 is reserved for
     // `this`.
-    implicit val ctx = new Context(method.isStatic)
+    implicit val ctx = new Context(clazz.symbol.typ, method.isStatic)
     method.params.foreach { p =>
       ctx.declare(p.symbol)
     }
@@ -372,7 +517,7 @@ class JVMGen(implicit config: Config)
       implicit val loopExits: List[Label] = Nil
       emitStmt(method.body)
 
-      printf(">>> Emitted a body of a method.\n")
+      //   printf(">>> Emitted a body of a method.\n")
 
       appendReturnIfNecessary(method)
       mv.visitMaxs(-1, -1) // again, random arguments
@@ -401,8 +546,10 @@ class JVMGen(implicit config: Config)
 
   type LocalVars = mutable.TreeMap[LocalVarSymbol, Int]
 
-  private class Context(isStatic: Boolean = true) {
-
+  private class Context(
+      val currentClassType: ClassType,
+      val isStatic: Boolean = true
+  ) {
     val index: LocalVars = new LocalVars
 
     def declare(v: LocalVarSymbol): Int = {
@@ -426,7 +573,7 @@ class JVMGen(implicit config: Config)
   def emitStmt(
       stmt: Stmt
   )(implicit mv: MethodVisitor, loopExits: List[Label], ctx: Context): Unit = {
-    printf(s"At ${stmt.pos}, emitStmt(stmt = $stmt)\n")
+    // printf(s"At ${stmt.pos}, emitStmt(stmt = $stmt)\n")
 
     stmt match {
       case Block(stmts) => stmts foreach emitStmt
@@ -506,7 +653,7 @@ class JVMGen(implicit config: Config)
     * @param ctx  the current context
     */
   def emitExpr(expr: Expr)(implicit mv: MethodVisitor, ctx: Context): Unit = {
-    printf(s"At ${expr.pos}, emitExpr(expr = $expr)\n")
+    // printf(s"At ${expr.pos}, emitExpr(expr = $expr)\n")
 
     expr match {
       case IntLit(v)      => mv.visitLdcInsn(v)
@@ -575,7 +722,6 @@ class JVMGen(implicit config: Config)
           false
         )
 
-      // 与PA3不同，此处无需修改
       case This() => mv.visitVarInsn(Opcodes.ALOAD, 0)
 
       case MemberVar(receiver, v) =>
@@ -588,7 +734,7 @@ class JVMGen(implicit config: Config)
         )
 
       case MemberMethod(receiver, method) =>
-        printf(s"receiver.typ = ${receiver.typ}\n")
+        // printf(s"receiver.typ = ${receiver.typ}\n")
 
         // 先处理好 receiver
         emitExpr(receiver)
@@ -661,8 +807,8 @@ class JVMGen(implicit config: Config)
       case MemberCall(receiver, m, args) =>
         (receiver :: args) foreach emitExpr
 
-        printf(s"MemberCall(receiver = $receiver, m = $m, args = $args)\n")
-        printf(s"descriptor(m) = ${method_descriptor(m.typ)}\n")
+        // printf(s"MemberCall(receiver = $receiver, m = $m, args = $args)\n")
+        // printf(s"descriptor(m) = ${method_descriptor(m.typ)}\n")
 
         mv.visitMethodInsn(
           Opcodes.INVOKEVIRTUAL,
@@ -687,9 +833,127 @@ class JVMGen(implicit config: Config)
           method_descriptor(fun.typ)
         )
 
-      // TODO: ExpressionLambda
+      case el @ ExpressionLambda(params, expr, scope) =>
+        // 加入所需基类
+        functionTypes += el.typ.asInstanceOf[FunType]
+        // 声明 lambda
+        // 方便起见，声明时我们将所有的 lambda 表达式都统一视为 BlockLambda
+        val lambdaIndex = lambdaTot
+        lambdaTot += 1
+        emitLambda(
+          new BlockLambda(
+            params,
+            new Block(List(new Return(Some(expr))))(
+              scope.nestedScope.asInstanceOf[LocalScope]
+            ),
+            scope
+          )(el.typ),
+          lambdaIndex,
+          ctx.currentClassType
+        )
+        // 方便起见，这里先预准备一些相关的类型
+        val lambdaClassName = "Lambda$" + lambdaIndex
+        val parentType = fromFunTypeToFunBaseClassType(
+          el.typ.asInstanceOf[FunType]
+        )
+        val lambdaClassType = ClassType(lambdaClassName, Some(parentType))
+        // new 一个函数对象
+        mv.visitTypeInsn(
+          Opcodes.NEW,
+          internalName(lambdaClassType)
+        )
+        // 调用构造函数，构造函数会消耗一个栈顶的函数对象，所以这里 duplicate 一下
+        mv.visitInsn(Opcodes.DUP)
+        mv.visitMethodInsn(
+          Opcodes.INVOKESPECIAL,
+          internalName(lambdaClassType),
+          CONSTRUCTOR_NAME,
+          CONSTRUCTOR_DESC
+        )
+        if (!ctx.isStatic) {
+          // 为 self 赋值会消耗函数对象，故这里再 duplicate 一发
+          mv.visitInsn(Opcodes.DUP)
+          // this 应该存于 index = 0 的临时变量中，将其 load 到栈顶
+          mv.visitVarInsn(loadOp(ctx.currentClassType), 0)
+          // 把新建的函数对象的self赋为receiver得到的对象
+          mv.visitFieldInsn(
+            Opcodes.PUTFIELD,
+            internalName(lambdaClassType),
+            "_self",
+            descriptor(ctx.currentClassType)
+          )
+        }
+        scope.captured.map(
+          p => { // p 是一个 [[LocalVarSymbol]]
+            // 赋值总会消耗函数对象，故这里再 duplicate 一发
+            mv.visitInsn(Opcodes.DUP)
+            // 将所需的临时变量 load 到栈顶
+            mv.visitVarInsn(loadOp(p.typ), ctx.index(p))
+            // 把新建的函数对象的self赋为receiver得到的对象
+            mv.visitFieldInsn(
+              Opcodes.PUTFIELD,
+              internalName(lambdaClassType),
+              p.name,
+              descriptor(p.typ)
+            )
+          }
+        )
 
-      // TODO: BlockLambda
+      case bl @ BlockLambda(params, block, scope) =>
+        // 加入所需基类
+        functionTypes += bl.typ.asInstanceOf[FunType]
+        // 声明 lambda
+        // 方便起见，声明时我们将所有的 lambda 表达式都统一视为 BlockLambda
+        val lambdaIndex = lambdaTot
+        lambdaTot += 1
+        emitLambda(bl, lambdaIndex, ctx.currentClassType)
+        // 方便起见，这里先预准备一些相关的类型
+        val lambdaClassName = "Lambda$" + lambdaIndex
+        val parentType = fromFunTypeToFunBaseClassType(
+          bl.typ.asInstanceOf[FunType]
+        )
+        val lambdaClassType = ClassType(lambdaClassName, Some(parentType))
+        // new 一个函数对象
+        mv.visitTypeInsn(
+          Opcodes.NEW,
+          internalName(lambdaClassType)
+        )
+        // 调用构造函数，构造函数会消耗一个栈顶的函数对象，所以这里 duplicate 一下
+        mv.visitInsn(Opcodes.DUP)
+        mv.visitMethodInsn(
+          Opcodes.INVOKESPECIAL,
+          internalName(lambdaClassType),
+          CONSTRUCTOR_NAME,
+          CONSTRUCTOR_DESC
+        )
+        if (!ctx.isStatic) {
+          // 为 self 赋值会消耗函数对象，故这里再 duplicate 一发
+          mv.visitInsn(Opcodes.DUP)
+          // this 应该存于 index = 0 的临时变量中，将其 load 到栈顶
+          mv.visitVarInsn(loadOp(ctx.currentClassType), 0)
+          // 把新建的函数对象的self赋为receiver得到的对象
+          mv.visitFieldInsn(
+            Opcodes.PUTFIELD,
+            internalName(lambdaClassType),
+            "_self",
+            descriptor(ctx.currentClassType)
+          )
+        }
+        scope.captured.map(
+          p => { // p 是一个 [[LocalVarSymbol]]
+            // 赋值总会消耗函数对象，故这里再 duplicate 一发
+            mv.visitInsn(Opcodes.DUP)
+            // 将所需的临时变量 load 到栈顶
+            mv.visitVarInsn(loadOp(p.typ), ctx.index(p))
+            // 把新建的函数对象的self赋为receiver得到的对象
+            mv.visitFieldInsn(
+              Opcodes.PUTFIELD,
+              internalName(lambdaClassType),
+              p.name,
+              descriptor(p.typ)
+            )
+          }
+        )
 
       case ClassTest(obj, clazz) =>
         emitExpr(obj)
@@ -700,7 +964,11 @@ class JVMGen(implicit config: Config)
     }
   }
 
+  var functionTypes: mutable.Set[FunType] = mutable.Set.empty[FunType]
   var assistMethods: mutable.ArrayBuffer[(ClassDef, MethodDef)] =
     mutable.ArrayBuffer.empty[(ClassDef, MethodDef)]
-  var functionTypes: mutable.Set[FunType] = mutable.Set.empty[FunType]
+  var lambdaJVMClasses: mutable.ArrayBuffer[JVMClass] =
+    mutable.ArrayBuffer.empty[JVMClass]
+
+  var lambdaTot = 0
 }

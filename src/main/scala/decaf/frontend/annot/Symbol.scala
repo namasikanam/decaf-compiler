@@ -186,8 +186,11 @@ class MethodSymbol(
   * @param typ  type
   * @param pos  position
   */
-class LocalVarSymbol(val name: String, val typ: Type, val pos: Pos)
-    extends Symbol
+class LocalVarSymbol(
+    val name: String,
+    val typ: Type,
+    val pos: Pos = new Pos(0, 0)
+) extends Symbol
     with VarSymbol {
 
   type Typ = Type

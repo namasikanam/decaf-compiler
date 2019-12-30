@@ -232,7 +232,7 @@ trait Util {
   def internalName(classTyp: ClassType): String = {
     val in = toASMType(classTyp).getInternalName
 
-    printf(s"classTyp = $classTyp, internal name = $in\n")
+    // printf(s"classTyp = $classTyp, internal name = $in\n")
 
     in
   }
