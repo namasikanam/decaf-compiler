@@ -203,9 +203,11 @@ trait TacEmitter {
         val it = emitExpr(index)
         val addr = emitArrayElementAddress(at, it)
         fv.visitLoadFrom(addr)
-      case ArrayLen(array) =>
-        val at = emitExpr(array)
-        fv.visitLoadFrom(at, -4)
+
+      // TODO: The meaning of [[ArrayLen]] seems to be changed
+      //   case ArrayLen(array) =>
+      //     val at = emitExpr(array)
+      //     fv.visitLoadFrom(at, -4)
 
       case NewClass(clazz) => fv.visitNewClass(clazz.name)
 
@@ -457,9 +459,9 @@ trait TacEmitter {
         // for i in 0..被捕獲的變量數
         //    在 fv 中生成 *(result + (i * 4 + 8)) = 第 i 個被捕獲的變量
         for (i <- 0 to scope.captured.size() - 1) {
-        //   printf(
-        //     s"captured(${scope.captured(i)}) = ${ctx.vars(scope.captured(i))}\n"
-        //   );
+          //   printf(
+          //     s"captured(${scope.captured(i)}) = ${ctx.vars(scope.captured(i))}\n"
+          //   );
 
           fv.visitStoreTo(result, i * 4 + 8, ctx.vars(scope.captured(i)))
         }
@@ -505,8 +507,9 @@ trait TacEmitter {
           fv.visitFunctionCall(func, as, true)
         }
 
-      //   case ArrayLenCall(array) =>
-      // not required in PA3
+      case ArrayLenCall(array) =>
+        val at = emitExpr(array)
+        fv.visitLoadFrom(at, -4)
 
       case ClassTest(obj, clazz) if obj.typ <= clazz.typ =>
         // Accelerate: when obj.type <: is.type, the test must be successful!
