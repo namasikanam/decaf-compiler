@@ -3,23 +3,79 @@ package decaf.backend.opt
 import java.io.PrintWriter
 
 import decaf.driver.{Config, Phase}
-import decaf.lowlevel.tac.{Simulator, TacProg}
+import decaf.lowlevel.tac.{Simulator, TacProg, TacFunc, TacInstr}
+import decaf.lowlevel.instr.PseudoInstr
+import decaf.printing.PrettyCFG
+import decaf.backend.dataflow.{CFG, LivenessAnalyzer}
+
+import collection.JavaConverters._
 
 /**
   * TAC optimization phase: optimize a TAC program.
   *
-  * NO optimization is done here, as you see we implemented the transformation as an identity function -- we leave it
-  * to you!
   */
-class Optimizer(implicit config: Config) extends Phase[TacProg, TacProg]("optimizer", config) {
+class Optimizer(implicit config: Config)
+    extends Phase[TacProg, TacProg]("optimizer", config) {
 
   /**
     * Transformer entry.
     *
-    * @param input a TAC program
-    * @return also a TAC program, but optimized (currently equals `input`)
+    * @param func a TAC program
+    * @return also a TAC program, but optimized
     */
-  override def transform(input: TacProg): TacProg = input
+  override def transform(tacProg: TacProg): TacProg = {
+    // 调用CFG
+    val analyzer = new LivenessAnalyzer[TacInstr]
+
+    var funcs = tacProg.funcs.asScala
+    var changed = false
+    do {
+      changed = false
+
+      funcs.foreach(func => {
+        val instrSeq = func.getInstrSeq().asScala
+        val cfg = CFG.buildFrom(instrSeq.toList)
+        analyzer(cfg)
+
+        // 进入CFG分析
+        val block_it = cfg.iterator
+        while (block_it.hasNext) {
+          val loc_it = block_it.next().seqIterator
+          while (loc_it.hasNext) {
+            val loc = loc_it.next()
+            val instr = loc.instr
+
+            // 是否产生了赋值
+            if (!instr.dsts.isEmpty) {
+              // 被赋值的 Temp 是否是活跃变量
+              if (!loc.liveOut.contains(instr.dsts(0))) {
+                // printf(s"${instr.dsts(0)} is not live!\n")
+
+                // 是否是一个 call 赋值给 Temp
+                if (!instr.isInstanceOf[TacInstr.IndirectCall] && !instr
+                      .isInstanceOf[TacInstr.DirectCall]) {
+                  instrSeq -= instr
+
+                  changed = true
+                }
+              }
+            }
+          }
+        }
+      })
+    } while (changed)
+
+    tacProg
+  }
+
+  /**
+    *
+    * @param instrIndex
+    * @return
+    */
+  def optimizeInstr(
+      instrIndex: Int
+  )(implicit inputSeq: List[TacInstr], outputFunc: TacFunc): Unit = {}
 
   /**
     * After generating the optimized TAC program, dump it and start the simulator if necessary.
