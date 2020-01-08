@@ -15,6 +15,12 @@ import scala.util.Random
 final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
 
   override def apply(graph: CFG[PseudoInstr], info: SubroutineInfo): Unit = {
+    // Initialization
+    regOf.clear()
+    tempOf.clear()
+    used.clear()
+    neighborOf.clear()
+
     val subEmitter = emitter.emitSubroutine(info)
 
     // printf("When coloring, CFG = {\n")
@@ -42,11 +48,14 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
     // Calculate the mapping between temps and regs
     alloc()
 
+    printf(s"The colors are:\n")
+    regOf.foreach(x => printf(s"regof[${x._1}] = ${x._2}\n"))
+
     // Emit correct MIPS instructions
     (0 to info.numArgs - 1).foreach(
       i => {
         val temp = new Temp(i)
-        val reg = regOf(i)
+        val reg = if (regOf.contains(temp.index)) regOf(temp.index) else Mips.V1
         subEmitter.emitLoadFromStack(reg, temp)
         bind(reg, temp)
       }
