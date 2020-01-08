@@ -18,8 +18,9 @@ import decaf.util.Conversions._
   * @param emitter  helper assembly code emitter
   * @param regAlloc register allocator
   */
-class Asm(val emitter: AsmEmitter, val regAlloc: RegAlloc)(implicit config: Config)
-  extends Phase[TacProg, String]("asm: " + emitter, config) {
+class Asm(val emitter: AsmEmitter, val regAlloc: RegAlloc)(
+    implicit config: Config
+) extends Phase[TacProg, String]("asm: " + emitter, config) {
 
   /**
     * Transformer entry.
@@ -38,11 +39,34 @@ class Asm(val emitter: AsmEmitter, val regAlloc: RegAlloc)(implicit config: Conf
 
     emitter.emitSubroutineBegin()
     for (func <- prog.funcs) {
+      printf(s"========= $func ==========\n")
+
       Log.info("emit func for %s", func.entry.prettyString)
       val (instrSeq, info) = emitter.selectInstr(func)
+
+      //   printf(s"instrSeq = {\n")
+      //   for (seq <- instrSeq) {
+      //     printf(s"$seq\n")
+      //   }
+      //   printf("}\n")
+
       val cfg = CFG.buildFrom(instrSeq)
+
+      //   printf("Before analyze, CFG = {\n")
+      //   for (bb <- cfg) {
+      //     printf(s">> Begin of a block.\n")
+      //     bb.iterator.foreach { loc =>
+      //       printf(s"${loc.instr}\n")
+      //     }
+      //     printf(s">> End of a block.\n")
+      //   }
+      //   printf("}\n")
+
       analyzer(cfg)
-      Log.ifLoggable(Level.FINE, printer => new PrettyCFG[PseudoInstr](printer).pretty(cfg))
+      Log.ifLoggable(
+        Level.FINE,
+        printer => new PrettyCFG[PseudoInstr](printer).pretty(cfg)
+      )
       regAlloc(cfg, info)
     }
 

@@ -17,6 +17,16 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
   override def apply(graph: CFG[PseudoInstr], info: SubroutineInfo): Unit = {
     val subEmitter = emitter.emitSubroutine(info)
 
+    // printf("When coloring, CFG = {\n")
+    // for (bb <- graph) {
+    //   printf(s">> Begin of a block.\n")
+    //   bb.iterator.foreach { loc =>
+    //     printf(s"${loc.instr}\n")
+    //   }
+    //   printf(s">> End of a block.\n")
+    // }
+    // printf("}\n")
+
     // Build a graph
     // ??????????
     (0 to info.numArgs - 1).foreach(
@@ -56,7 +66,7 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
   private def buildBlock(
       bb: BasicBlock[PseudoInstr]
   ): Unit = {
-    bb.seqIterator.foreach {
+    bb.iterator.foreach {
       case loc if loc.instr.isInstanceOf[Holes.CallerSave.type]    => None
       case loc if loc.instr.isInstanceOf[Holes.CallerRestore.type] => None
       case loc                                                     =>
@@ -114,16 +124,17 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
   ): Unit = {
     val callerNeedSave = new mutable.ArrayBuffer[Reg]
 
-    bb.seqIterator.foreach {
+    bb.iterator.foreach {
       case loc if loc.instr.isInstanceOf[Holes.CallerSave.type] =>
-        for {
-          reg <- emitter.callerSaveRegs
-          if tempOf.contains(reg) && loc.liveOut
-            .find(_.index == tempOf(reg))
-            .isDefined
-        } yield {
-          callerNeedSave += reg
-          subEmitter.emitStoreToStack(reg, tempOf(reg))
+        for (reg <- emitter.callerSaveRegs) {
+          if (tempOf.contains(reg) && loc.liveOut
+                .find(_.index == tempOf(reg).index)
+                .isDefined) {
+            printf(s"callerNeedSave += $reg\n")
+
+            callerNeedSave += reg
+            subEmitter.emitStoreToStack(reg, tempOf(reg))
+          }
         }
       case loc if loc.instr.isInstanceOf[Holes.CallerRestore.type] =>
         callerNeedSave.foreach { reg =>

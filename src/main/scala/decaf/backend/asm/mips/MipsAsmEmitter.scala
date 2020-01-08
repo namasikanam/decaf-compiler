@@ -228,11 +228,19 @@ final class MipsAsmEmitter
         case TacInstr.CondBranch.Op.BNEZ => Mips.BranchOp.BNEZ
       }
       seq += new Mips.Branch(op, instr.cond, instr.target)
+
+      printf(
+        s"visitCondBranch(instr = $instr), last mips instruction = ${seq.last}\n"
+      )
     }
 
     override def visitReturn(instr: TacInstr.Return): Unit = {
       instr.value.foreach { seq += new Mips.Move(Mips.V0, _) }
       seq += new Mips.JumpToEpilogue(entry)
+
+      printf(
+        s"visitReturn(instr = $instr), last mips instruction = ${seq.last}\n"
+      )
     }
 
     override def visitParm(instr: TacInstr.Parm): Unit = {
