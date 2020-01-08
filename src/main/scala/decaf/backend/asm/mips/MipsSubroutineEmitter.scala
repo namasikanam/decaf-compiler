@@ -78,9 +78,9 @@ class MipsSubroutineEmitter private[mips] (
   override def emitEnd(used: Set[Reg]): Unit = {
     printer.printComment("start of prologue")
 
-    printf(
-      s"In emitEnd, nextLocalOffset = ${nextLocalOffset}, info.argsSize = ${info.argsSize}\n"
-    )
+    // printf(
+    //   s"In emitEnd, nextLocalOffset = ${nextLocalOffset}, info.argsSize = ${info.argsSize}\n"
+    // )
 
     printer.printInstr(new Mips.SPAdd(-nextLocalOffset), "push stack frame")
 
