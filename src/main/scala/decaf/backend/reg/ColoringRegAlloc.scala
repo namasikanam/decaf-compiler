@@ -23,16 +23,6 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
 
     val subEmitter = emitter.emitSubroutine(info)
 
-    // printf("When coloring, CFG = {\n")
-    // for (bb <- graph) {
-    //   printf(s">> Begin of a block.\n")
-    //   bb.iterator.foreach { loc =>
-    //     printf(s"${loc.instr}\n")
-    //   }
-    //   printf(s">> End of a block.\n")
-    // }
-    // printf("}\n")
-
     // Build a graph
     // ??????????
     (0 to info.numArgs - 1).foreach(
@@ -47,9 +37,6 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
 
     // Calculate the mapping between temps and regs
     alloc()
-
-    printf(s"The colors are:\n")
-    regOf.foreach(x => printf(s"regof[${x._1}] = ${x._2}\n"))
 
     // Emit correct MIPS instructions
     (0 to info.numArgs - 1).foreach(
@@ -104,7 +91,7 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
     if (!neighborOf.isEmpty) {
       // Find a node whose degree is less than 20
       neighborOf
-        .find(_._2.size < 20)
+        .find(_._2.size < 19)
         .map(
           x => {
             // Remove the node from the graph
@@ -139,7 +126,7 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
           if (tempOf.contains(reg) && loc.liveOut
                 .find(_.index == tempOf(reg).index)
                 .isDefined) {
-            printf(s"callerNeedSave += $reg\n")
+            // printf(s"callerNeedSave += $reg\n")
 
             callerNeedSave += reg
             subEmitter.emitStoreToStack(reg, tempOf(reg))
@@ -185,11 +172,6 @@ final class ColoringRegAlloc(emitter: AsmEmitter) extends RegAlloc(emitter) {
     used += reg
     tempOf(reg) = temp
   }
-
-  /**
-    * Random number generator.
-    */
-  private val random = new Random
 
   // Color
   val regOf = new mutable.TreeMap[Int, Reg]

@@ -39,7 +39,7 @@ class Asm(val emitter: AsmEmitter, val regAlloc: RegAlloc)(
 
     emitter.emitSubroutineBegin()
     for (func <- prog.funcs) {
-      printf(s"========= $func ==========\n")
+      //   printf(s"========= $func ==========\n")
 
       Log.info("emit func for %s", func.entry.prettyString)
       val (instrSeq, info) = emitter.selectInstr(func)
