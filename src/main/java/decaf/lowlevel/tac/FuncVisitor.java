@@ -216,15 +216,16 @@ public class FuncVisitor {
      * @return the fresh temp if we need return (or else null)
      */
     public Temp visitMemberCall(Temp object, String clazz, String method, List<Temp> args, boolean needReturn) {
-        // System.out.println("visitMemberCall(object, clazz = " + clazz + ", method = " + method + ", args, needReturn)");
+        // System.out.println("visitMemberCall(object, clazz = " + clazz + ", method = "
+        // + method + ", args, needReturn)");
 
         Temp temp = null;
         var vtbl = visitLoadFrom(object);
         var entry = visitLoadFrom(vtbl, ctx.getOffset(clazz, method));
 
-        func.add(new TacInstr.Parm(object));
+        func.add(new TacInstr.Parm(object, args.size()));
         for (var arg : args) {
-            func.add(new TacInstr.Parm(arg));
+            func.add(new TacInstr.Parm(arg, args.size()));
         }
         if (needReturn) {
             temp = freshTemp();
@@ -257,7 +258,7 @@ public class FuncVisitor {
         var entry = ctx.getFuncLabel(clazz, method);
 
         for (var arg : args) {
-            func.add(new TacInstr.Parm(arg));
+            func.add(new TacInstr.Parm(arg, args.size()));
         }
         if (needReturn) {
             temp = freshTemp();
@@ -293,12 +294,12 @@ public class FuncVisitor {
         var entry = visitLoadFrom(function);
 
         // 生成 parm func
-        func.add(new TacInstr.Parm(function));
+        func.add(new TacInstr.Parm(function, args.size()));
 
         // for arg in args
         for (var arg : args) {
             // 生成 parm arg
-            func.add(new TacInstr.Parm(arg));
+            func.add(new TacInstr.Parm(arg, args.size()));
         }
 
         // 生成 ret = call entry
@@ -332,7 +333,7 @@ public class FuncVisitor {
         Temp temp = null;
 
         for (var arg : args) {
-            this.func.add(new TacInstr.Parm(arg));
+            this.func.add(new TacInstr.Parm(arg, args.length));
         }
         if (needReturn) {
             temp = freshTemp();

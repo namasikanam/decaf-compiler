@@ -13,7 +13,8 @@ import scala.collection.mutable
 /**
   * Emit MIPS assembly code.
   */
-final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips.callerSaved) {
+final class MipsAsmEmitter
+    extends AsmEmitter("mips", Mips.allocatableRegs, Mips.callerSaved) {
 
   override def emitVTable(vtbl: VTable): Unit = {
     printer.println(".data")
@@ -21,9 +22,12 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
     printer.printLabel(vtbl.label, "virtual table for " + vtbl.className)
     if (vtbl.parent.isPresent) {
       val parent = vtbl.parent.get
-      printer.println(".word %s    # parent: %s", parent.label, parent.className)
-    }
-    else {
+      printer.println(
+        ".word %s    # parent: %s",
+        parent.label,
+        parent.className
+      )
+    } else {
       printer.println(".word 0    # parent: none")
     }
     val index = pool.add(vtbl.className)
@@ -34,10 +38,17 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
     printer.println()
   }
 
-  override def selectInstr(func: TacFunc): (List[PseudoInstr], SubroutineInfo) = {
+  override def selectInstr(
+      func: TacFunc
+  ): (List[PseudoInstr], SubroutineInfo) = {
     val selector = new MipsInstrSelector(func.entry)
     func.getInstrSeq.forEach(_.accept(selector))
-    val info = new SubroutineInfo(func.entry, func.numArgs, selector.hasCall, selector.maxArgs * 4)
+    val info = new SubroutineInfo(
+      func.entry,
+      func.numArgs,
+      selector.hasCall,
+      selector.maxArgs * 4
+    )
     (selector.seq.toList, info)
   }
 
@@ -45,13 +56,15 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
     printer.println(".text")
   }
 
-  override def emitSubroutine(info: SubroutineInfo) = new MipsSubroutineEmitter(this, info)
+  override def emitSubroutine(info: SubroutineInfo) =
+    new MipsSubroutineEmitter(this, info)
 
   override def emitEnd(): String = {
     if (usedIntrinsics.nonEmpty) {
       printer.println("# start of intrinsics")
       if (usedIntrinsics.contains(Intrinsic.READ_LINE.entry)) loadReadLine()
-      if (usedIntrinsics.contains(Intrinsic.STRING_EQUAL.entry)) loadStringEqual()
+      if (usedIntrinsics.contains(Intrinsic.STRING_EQUAL.entry))
+        loadStringEqual()
       if (usedIntrinsics.contains(Intrinsic.PRINT_BOOL.entry)) loadPrintBool()
       printer.println("# end of intrinsics")
       printer.println()
@@ -148,7 +161,8 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
     printer.println("jr $ra")
   }
 
-  private class MipsInstrSelector private[mips](var entry: Label) extends TacInstr.Visitor {
+  private class MipsInstrSelector private[mips] (var entry: Label)
+      extends TacInstr.Visitor {
 
     private[mips] val seq = new mutable.ArrayBuffer[PseudoInstr]
     private[mips] var maxArgs = 0
@@ -174,7 +188,7 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
 
     override def visitUnary(instr: TacInstr.Unary): Unit = {
       val op = instr.op match {
-        case TacInstr.Unary.Op.NEG => Mips.UnaryOp.NEG
+        case TacInstr.Unary.Op.NEG  => Mips.UnaryOp.NEG
         case TacInstr.Unary.Op.LNOT => Mips.UnaryOp.NOT
       }
       seq += new Mips.Unary(op, instr.dst, instr.operand)
@@ -182,19 +196,19 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
 
     override def visitBinary(instr: TacInstr.Binary): Unit = {
       val op = instr.op match {
-        case TacInstr.Binary.Op.ADD => Mips.BinaryOp.ADD
-        case TacInstr.Binary.Op.SUB => Mips.BinaryOp.SUB
-        case TacInstr.Binary.Op.MUL => Mips.BinaryOp.MUL
-        case TacInstr.Binary.Op.DIV => Mips.BinaryOp.DIV
-        case TacInstr.Binary.Op.MOD => Mips.BinaryOp.REM
-        case TacInstr.Binary.Op.EQU => Mips.BinaryOp.SEQ
-        case TacInstr.Binary.Op.NEQ => Mips.BinaryOp.SNE
-        case TacInstr.Binary.Op.LES => Mips.BinaryOp.SLT
-        case TacInstr.Binary.Op.LEQ => Mips.BinaryOp.SLE
-        case TacInstr.Binary.Op.GTR => Mips.BinaryOp.SGT
-        case TacInstr.Binary.Op.GEQ => Mips.BinaryOp.SGE
+        case TacInstr.Binary.Op.ADD  => Mips.BinaryOp.ADD
+        case TacInstr.Binary.Op.SUB  => Mips.BinaryOp.SUB
+        case TacInstr.Binary.Op.MUL  => Mips.BinaryOp.MUL
+        case TacInstr.Binary.Op.DIV  => Mips.BinaryOp.DIV
+        case TacInstr.Binary.Op.MOD  => Mips.BinaryOp.REM
+        case TacInstr.Binary.Op.EQU  => Mips.BinaryOp.SEQ
+        case TacInstr.Binary.Op.NEQ  => Mips.BinaryOp.SNE
+        case TacInstr.Binary.Op.LES  => Mips.BinaryOp.SLT
+        case TacInstr.Binary.Op.LEQ  => Mips.BinaryOp.SLE
+        case TacInstr.Binary.Op.GTR  => Mips.BinaryOp.SGT
+        case TacInstr.Binary.Op.GEQ  => Mips.BinaryOp.SGE
         case TacInstr.Binary.Op.LAND => Mips.BinaryOp.AND
-        case TacInstr.Binary.Op.LOR => Mips.BinaryOp.OR
+        case TacInstr.Binary.Op.LOR  => Mips.BinaryOp.OR
       }
       seq += new Mips.Binary(op, instr.dst, instr.lhs, instr.rhs)
     }
@@ -220,7 +234,11 @@ final class MipsAsmEmitter extends AsmEmitter("mips", Mips.allocatableRegs, Mips
       if (argCount < 4) {
         seq += new Mips.Move(Mips.argRegs(argCount), instr.value)
       } else {
-        seq += new Mips.StoreWord(instr.value, Mips.SP, argCount * 4)
+        seq += new Mips.StoreWord(
+          instr.value,
+          Mips.SP,
+          argCount * 4 - (instr.numArgs * 4 + 36)
+        ) // (instr.numArgs * 4 + 36) is the length of the frame of callee function
       }
       argCount += 1
     }

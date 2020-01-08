@@ -413,10 +413,12 @@ public abstract class TacInstr extends PseudoInstr {
      */
     public static class Parm extends TacInstr {
         public final Temp value;
+        public final Integer numArgs;
 
-        public Parm(Temp value) {
+        public Parm(Temp value, Integer numArgs) {
             super(new Temp[] {}, new Temp[] { value });
             this.value = value;
+            this.numArgs = numArgs;
         }
 
         @Override
