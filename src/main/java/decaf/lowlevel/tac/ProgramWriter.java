@@ -49,7 +49,7 @@ public class ProgramWriter {
         }
 
         // Build a special virtual table
-        nameOfGlobalVTable = "GlobalVTable@" + UUID.randomUUID().toString();
+        nameOfGlobalVTable = "GlobalVTable_" + UUID.randomUUID().toString().replace('-', '_');
         buildVTableFor(new ClassInfo(nameOfGlobalVTable, Optional.empty(), new HashSet<String>(), new HashSet<String>(),
                 new HashSet<String>(), false));
     }

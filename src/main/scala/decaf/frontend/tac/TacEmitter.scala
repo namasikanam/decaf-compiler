@@ -230,7 +230,7 @@ trait TacEmitter {
         // printf(s"At ${expr.pos}, MemberMethod($receiver, $method)\n")
 
         // newMv = mv.freshFunc(随便起个名字，函数类型的参数数量 + 1);
-        val methodName = "member:(" + rcvr.toString + ")." + method.name + "@" + Random.alphanumeric
+        val methodName = "member_" + rcvr.toString + "_." + method.name + "_" + Random.alphanumeric
           .take(10)
           .mkString
         val newFv = fv.freshFunc(methodName, method.typ.args.length + 1)
@@ -281,7 +281,7 @@ trait TacEmitter {
 
       case StaticMethod(owner, method) =>
         // newFv = fv.freshFunc(随便起个名字，函数类型的参数数量)
-        val methodName = "static:" + owner.name + "." + method.name + "@" + Random.alphanumeric
+        val methodName = "static_" + owner.name + "_." + method.name + "_" + Random.alphanumeric
           .take(10)
           .mkString
 
