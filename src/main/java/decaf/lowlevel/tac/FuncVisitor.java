@@ -223,9 +223,9 @@ public class FuncVisitor {
         var vtbl = visitLoadFrom(object);
         var entry = visitLoadFrom(vtbl, ctx.getOffset(clazz, method));
 
-        func.add(new TacInstr.Parm(object, args.size()));
+        func.add(new TacInstr.Parm(object));
         for (var arg : args) {
-            func.add(new TacInstr.Parm(arg, args.size()));
+            func.add(new TacInstr.Parm(arg));
         }
         if (needReturn) {
             temp = freshTemp();
@@ -258,7 +258,7 @@ public class FuncVisitor {
         var entry = ctx.getFuncLabel(clazz, method);
 
         for (var arg : args) {
-            func.add(new TacInstr.Parm(arg, args.size()));
+            func.add(new TacInstr.Parm(arg));
         }
         if (needReturn) {
             temp = freshTemp();
@@ -294,12 +294,12 @@ public class FuncVisitor {
         var entry = visitLoadFrom(function);
 
         // 生成 parm func
-        func.add(new TacInstr.Parm(function, args.size()));
+        func.add(new TacInstr.Parm(function));
 
         // for arg in args
         for (var arg : args) {
             // 生成 parm arg
-            func.add(new TacInstr.Parm(arg, args.size()));
+            func.add(new TacInstr.Parm(arg));
         }
 
         // 生成 ret = call entry
@@ -333,7 +333,7 @@ public class FuncVisitor {
         Temp temp = null;
 
         for (var arg : args) {
-            this.func.add(new TacInstr.Parm(arg, args.length));
+            this.func.add(new TacInstr.Parm(arg));
         }
         if (needReturn) {
             temp = freshTemp();
@@ -477,6 +477,8 @@ public class FuncVisitor {
      * @return a new FuncVisitor
      */
     public FuncVisitor freshFunc(String func, int numArgs) {
+        // System.out.println("In freshFunc, numArgs = " + numArgs);
+
         ctx.putFuncLabel(func);
         var entry = ctx.getFuncLabel(func);
 

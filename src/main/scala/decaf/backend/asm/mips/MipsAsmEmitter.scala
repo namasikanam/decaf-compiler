@@ -43,6 +43,11 @@ final class MipsAsmEmitter
   ): (List[PseudoInstr], SubroutineInfo) = {
     val selector = new MipsInstrSelector(func.entry)
     func.getInstrSeq.forEach(_.accept(selector))
+
+    // printf(
+    //   s"In selectInstr, numArgs = ${func.numArgs}, entry = ${func.entry}, selector.maxArgs = ${selector.maxArgs}\n"
+    // )
+
     val info = new SubroutineInfo(
       func.entry,
       func.numArgs,
@@ -237,8 +242,8 @@ final class MipsAsmEmitter
         seq += new Mips.StoreWord(
           instr.value,
           Mips.SP,
-          argCount * 4 - (instr.numArgs * 4 + 36)
-        ) // (instr.numArgs * 4 + 36) is the length of the frame of callee function
+          -(argCount - 3) * 4
+        )
       }
       argCount += 1
     }

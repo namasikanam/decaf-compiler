@@ -13,7 +13,8 @@ import scala.collection.mutable
   * Recall the stack frame of a MIPS subroutine looks this:
   * {{{
   * previous stack frame ...
-  * SP + 4n + 36 + : local data m - 1
+  * SP + 4n + 36 + 4(m-1) : local data m - 1
+  * ...
   * 4(m - 1)
   * ...
   * SP + 4n + 36   : local data 0
@@ -29,15 +30,16 @@ import scala.collection.mutable
   * }}}
   * The parenthesized slots may not be used, but to make our life easier, we always reserve them.
   */
-class MipsSubroutineEmitter private[mips](emitter: MipsAsmEmitter, info: SubroutineInfo)
-  extends SubroutineEmitter(emitter, info) {
+class MipsSubroutineEmitter private[mips] (
+    emitter: MipsAsmEmitter,
+    info: SubroutineInfo
+) extends SubroutineEmitter(emitter, info) {
 
   override def emitStoreToStack(src: Reg, temp: Temp): Unit = {
     if (!offsets.contains(temp)) {
       if (temp.index < info.numArgs) { // Always map arg `i` to `SP + 4 * i`.
         offsets(temp) = 4 * temp.index
-      }
-      else {
+      } else {
         offsets(temp) = nextLocalOffset
         nextLocalOffset += 4
       }
@@ -53,7 +55,9 @@ class MipsSubroutineEmitter private[mips](emitter: MipsAsmEmitter, info: Subrout
         buf += new Mips.NativeLoadWord(dst, Mips.SP, offset)
         return
       }
-      throw new IllegalArgumentException("offsets doesn't contain " + src + " when loading " + dst)
+      throw new IllegalArgumentException(
+        "offsets doesn't contain " + src + " when loading " + dst
+      )
     }
     buf += new Mips.NativeLoadWord(dst, Mips.SP, offsets(src))
   }
@@ -67,27 +71,60 @@ class MipsSubroutineEmitter private[mips](emitter: MipsAsmEmitter, info: Subrout
   }
 
   override def emitLabel(label: Label): Unit = {
-    buf += new Mips.MipsLabel(label).toNative(new Array[Reg](0), new Array[Reg](0))
+    buf += new Mips.MipsLabel(label)
+      .toNative(new Array[Reg](0), new Array[Reg](0))
   }
 
   override def emitEnd(used: Set[Reg]): Unit = {
     printer.printComment("start of prologue")
+
+    // printf(
+    //   s"In emitEnd, nextLocalOffset = ${nextLocalOffset}, info.argsSize = ${info.argsSize}\n"
+    // )
+
     printer.printInstr(new Mips.SPAdd(-nextLocalOffset), "push stack frame")
+
+    // If there're more than 4 arguments, put them to the correct positions.
+    var j = 0
+    for (j <- 4 until info.numArgs) {
+      printer.printInstr(
+        new Mips.NativeLoadWord(
+          Mips.T0,
+          Mips.SP,
+          nextLocalOffset - (j - 3) * 4
+        ),
+        s"load argument $j to $$t0"
+      )
+      printer.printInstr(
+        new Mips.NativeStoreWord(Mips.T0, Mips.SP, 4 * j),
+        s"store $$t0 to argument $j"
+      )
+    }
+
     if (info.hasCalls) {
-      printer.printInstr(new Mips.NativeStoreWord(Mips.RA, Mips.SP, info.argsSize + 32), "save the return address")
+      printer.printInstr(
+        new Mips.NativeStoreWord(Mips.RA, Mips.SP, info.argsSize + 32),
+        "save the return address"
+      )
     }
     for {
       (reg, i) <- Mips.calleeSaved.zipWithIndex
       if used(reg)
     } {
-      printer.printInstr(new Mips.NativeStoreWord(reg, Mips.SP, info.argsSize + 4 * i), "save value of " + reg)
+      printer.printInstr(
+        new Mips.NativeStoreWord(reg, Mips.SP, info.argsSize + 4 * i),
+        "save value of " + reg
+      )
     }
     printer.printComment("end of prologue")
     printer.println()
 
     printer.printComment("start of body")
     for (i <- 0 until Math.min(info.numArgs, 4)) {
-      printer.printInstr(new Mips.NativeStoreWord(Mips.argRegs(i), Mips.SP, 4 * i), "save arg " + i)
+      printer.printInstr(
+        new Mips.NativeStoreWord(Mips.argRegs(i), Mips.SP, 4 * i),
+        "save arg " + i
+      )
     }
     buf.foreach(printer.printInstr)
     printer.printComment("end of body")
@@ -99,11 +136,20 @@ class MipsSubroutineEmitter private[mips](emitter: MipsAsmEmitter, info: Subrout
       (reg, i) <- Mips.calleeSaved.zipWithIndex
       if used(reg)
     } {
-      printer.printInstr(new Mips.NativeLoadWord(Mips.calleeSaved(i), Mips.SP, info.argsSize + 4 * i),
-        "restore value of $S" + i)
+      printer.printInstr(
+        new Mips.NativeLoadWord(
+          Mips.calleeSaved(i),
+          Mips.SP,
+          info.argsSize + 4 * i
+        ),
+        "restore value of $S" + i
+      )
     }
     if (info.hasCalls) {
-      printer.printInstr(new Mips.NativeLoadWord(Mips.RA, Mips.SP, info.argsSize + 32), "restore the return address")
+      printer.printInstr(
+        new Mips.NativeLoadWord(Mips.RA, Mips.SP, info.argsSize + 32),
+        "restore the return address"
+      )
     }
     printer.printInstr(new Mips.SPAdd(nextLocalOffset), "pop stack frame")
     printer.printComment("end of epilogue")
